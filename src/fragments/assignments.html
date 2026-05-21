@@ -1,0 +1,269 @@
+<!-- SideNavBar -->
+<aside class="hidden md:flex flex-col h-full w-64 bg-slate-100/30 dark:bg-slate-900/30 border-r border-slate-200/10 p-6 space-y-2">
+<div class="mb-10 px-3">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-gradient-to-tr from-primary to-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-white" style="font-size: 18px;">auto_awesome</span>
+</div>
+<div>
+<h1 class="font-light text-slate-900 dark:text-slate-100 tracking-widest text-lg">Donna AI</h1>
+<p class="text-[10px] text-slate-500 uppercase tracking-tighter">Premium AI Scholar</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="text-slate-500 dark:text-slate-400 p-3 flex items-center gap-3 hover:translate-x-1 transition-transform duration-200 hover:text-slate-800" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-sm font-label tracking-wide">Overview</span>
+</a>
+<a class="text-slate-500 dark:text-slate-400 p-3 flex items-center gap-3 hover:translate-x-1 transition-transform duration-200 hover:text-slate-800" href="#">
+<span class="material-symbols-outlined">event_upcoming</span>
+<span class="text-sm font-label tracking-wide">Today</span>
+</a>
+<!-- Active Tab: Assignments -->
+<a class="text-slate-900 dark:text-white bg-white/50 dark:bg-slate-800/50 rounded-xl shadow-sm p-3 flex items-center gap-3" href="#">
+<span class="material-symbols-outlined">assignment</span>
+<span class="text-sm font-label tracking-wide font-medium">Assignments</span>
+</a>
+<a class="text-slate-500 dark:text-slate-400 p-3 flex items-center gap-3 hover:translate-x-1 transition-transform duration-200 hover:text-slate-800" href="#">
+<span class="material-symbols-outlined">calendar_month</span>
+<span class="text-sm font-label tracking-wide">Calendar</span>
+</a>
+<a class="text-slate-500 dark:text-slate-400 p-3 flex items-center gap-3 hover:translate-x-1 transition-transform duration-200 hover:text-slate-800" href="#">
+<span class="material-symbols-outlined">ads_click</span>
+<span class="text-sm font-label tracking-wide">Goals</span>
+</a>
+<a class="text-slate-500 dark:text-slate-400 p-3 flex items-center gap-3 hover:translate-x-1 transition-transform duration-200 hover:text-slate-800" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-sm font-label tracking-wide">Settings</span>
+</a>
+</nav>
+<div class="pt-6">
+<button class="w-full py-3 px-4 bg-gradient-to-br from-primary to-primary-dim text-on-primary rounded-full text-sm font-medium flex items-center justify-center gap-2 hover:opacity-90 transition-opacity">
+<span class="material-symbols-outlined" style="font-size: 18px;">add</span>
+        New Insight
+      </button>
+</div>
+</aside>
+<main class="flex-1 flex flex-col h-full relative overflow-hidden bg-surface">
+<!-- TopNavBar -->
+<header class="flex justify-between items-center w-full px-8 py-4 sticky top-0 z-50 bg-slate-50/80 dark:bg-slate-900/80 backdrop-blur-xl">
+<div class="flex items-center gap-4">
+<h2 class="text-xl font-light tracking-tight text-slate-800 dark:text-slate-100 font-headline">Assignments</h2>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 text-slate-500 bg-slate-100/50 px-4 py-2 rounded-full">
+<span class="material-symbols-outlined" style="font-size: 18px;">search</span>
+<input class="bg-transparent border-none text-xs focus:ring-0 w-32 md:w-48 placeholder:text-slate-400" placeholder="Search tasks..." type="text"/>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-slate-500 hover:text-slate-700 transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-high overflow-hidden border border-white">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="Close up portrait of a young male student with glasses in a minimalist sunlit office setting" src="/images/assignments-profile.jpg"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Content Canvas -->
+<div class="flex-1 overflow-y-auto px-8 py-6 custom-scrollbar">
+<!-- Filters -->
+<div class="flex items-center gap-2 mb-10">
+<button class="px-4 py-1.5 rounded-full text-xs font-medium bg-primary text-on-primary">All</button>
+<button class="px-4 py-1.5 rounded-full text-xs font-medium text-on-surface-variant hover:bg-surface-container-low transition-colors">By Class</button>
+<button class="px-4 py-1.5 rounded-full text-xs font-medium text-on-surface-variant hover:bg-surface-container-low transition-colors">Due Date</button>
+<button class="px-4 py-1.5 rounded-full text-xs font-medium text-on-surface-variant hover:bg-surface-container-low transition-colors flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-error"></span>
+          High Risk
+        </button>
+</div>
+<div class="flex flex-col lg:flex-row gap-12">
+<!-- Main List (2/3) -->
+<div class="flex-1 space-y-12">
+<!-- Overdue Group -->
+<section>
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-xs font-label tracking-[0.1em] text-on-surface-variant uppercase">Overdue</h3>
+<span class="text-[10px] bg-error-container text-on-error-container px-2 py-0.5 rounded-full font-medium">2 Actions</span>
+</div>
+<div class="space-y-4">
+<!-- Card 1 -->
+<div class="group relative bg-surface-container-lowest rounded-xl p-5 ghost-border hover:shadow-xl hover:shadow-slate-200/40 transition-all duration-300">
+<div class="flex items-start justify-between">
+<div class="flex gap-4">
+<div class="mt-1 w-2 h-2 rounded-full bg-error ring-4 ring-error/10"></div>
+<div>
+<h4 class="text-sm font-medium text-slate-900 group-hover:text-primary transition-colors">Final Literature Analysis: Modernism</h4>
+<div class="flex items-center gap-3 mt-2 text-[11px] text-on-surface-variant">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:14px">school</span> Eng 402</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:14px">schedule</span> 4h Est.</span>
+</div>
+</div>
+</div>
+<div class="text-right">
+<p class="text-[11px] font-medium text-error uppercase tracking-wider">Expired Oct 12</p>
+<p class="text-[10px] text-on-surface-variant mt-1">Critical Priority</p>
+</div>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="group bg-surface-container-lowest rounded-xl p-5 ghost-border hover:shadow-xl hover:shadow-slate-200/40 transition-all duration-300">
+<div class="flex items-start justify-between">
+<div class="flex gap-4">
+<div class="mt-1 w-2 h-2 rounded-full bg-error ring-4 ring-error/10"></div>
+<div>
+<h4 class="text-sm font-medium text-slate-900 group-hover:text-primary transition-colors">Calculus III Problem Set 8</h4>
+<div class="flex items-center gap-3 mt-2 text-[11px] text-on-surface-variant">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:14px">school</span> Math 250</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:14px">schedule</span> 2h Est.</span>
+</div>
+</div>
+</div>
+<div class="text-right">
+<p class="text-[11px] font-medium text-error uppercase tracking-wider">Expired Oct 14</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Due Today Group -->
+<section>
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-xs font-label tracking-[0.1em] text-on-surface-variant uppercase">Due Today</h3>
+</div>
+<div class="space-y-4">
+<div class="group bg-surface-container-lowest rounded-xl p-5 ghost-border hover:shadow-xl hover:shadow-slate-200/40 transition-all duration-300">
+<div class="flex items-start justify-between">
+<div class="flex gap-4">
+<div class="mt-1 w-2 h-2 rounded-full bg-tertiary ring-4 ring-tertiary/10"></div>
+<div>
+<h4 class="text-sm font-medium text-slate-900 group-hover:text-primary transition-colors">Microeconomics Market Simulation</h4>
+<div class="flex items-center gap-3 mt-2 text-[11px] text-on-surface-variant">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:14px">school</span> Econ 101</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:14px">schedule</span> 1.5h Est.</span>
+</div>
+</div>
+</div>
+<div class="text-right">
+<p class="text-[11px] font-medium text-primary uppercase tracking-wider">By 11:59 PM</p>
+<span class="inline-block mt-1 text-[9px] bg-tertiary-container/30 text-on-tertiary-container px-2 py-0.5 rounded-full">AI Thinking...</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Upcoming Group -->
+<section>
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-xs font-label tracking-[0.1em] text-on-surface-variant uppercase">Upcoming</h3>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Asymmetric Card -->
+<div class="group bg-surface-container-low rounded-xl p-5 border border-transparent hover:bg-surface-container-lowest hover:ghost-border transition-all duration-300">
+<h4 class="text-sm font-medium text-slate-900 group-hover:text-primary transition-colors">Organic Chem Lab Prep</h4>
+<p class="text-[11px] text-on-surface-variant mt-1">Chem 301 • Oct 18</p>
+<div class="mt-6 flex items-center justify-between">
+<span class="text-[10px] text-on-surface-variant font-medium">Low Risk</span>
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full border border-white bg-slate-200"></div>
+<div class="w-6 h-6 rounded-full border border-white bg-slate-300"></div>
+</div>
+</div>
+</div>
+<div class="group bg-surface-container-low rounded-xl p-5 border border-transparent hover:bg-surface-container-lowest hover:ghost-border transition-all duration-300">
+<h4 class="text-sm font-medium text-slate-900 group-hover:text-primary transition-colors">Intro to Psychology Quiz</h4>
+<p class="text-[11px] text-on-surface-variant mt-1">Psych 101 • Oct 20</p>
+<div class="mt-6 flex items-center justify-between">
+<span class="text-[10px] text-on-surface-variant font-medium">Medium Risk</span>
+<span class="material-symbols-outlined text-slate-300">auto_stories</span>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Side Panel (1/3) -->
+<div class="w-full lg:w-80 space-y-8">
+<div class="bg-surface-container-low/50 rounded-2xl p-6">
+<h3 class="text-sm font-medium mb-6">Course Progress</h3>
+<div class="space-y-6">
+<!-- Progress Item -->
+<div>
+<div class="flex justify-between text-[11px] mb-2">
+<span class="text-on-surface-variant">English Literature</span>
+<span class="font-medium">84%</span>
+</div>
+<div class="h-1 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 84%"></div>
+</div>
+</div>
+<!-- Progress Item -->
+<div>
+<div class="flex justify-between text-[11px] mb-2">
+<span class="text-on-surface-variant">Applied Calculus</span>
+<span class="font-medium">62%</span>
+</div>
+<div class="h-1 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-tertiary-container rounded-full" style="width: 62%"></div>
+</div>
+</div>
+<!-- Progress Item -->
+<div>
+<div class="flex justify-between text-[11px] mb-2">
+<span class="text-on-surface-variant">Microeconomics</span>
+<span class="font-medium">91%</span>
+</div>
+<div class="h-1 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-secondary rounded-full" style="width: 91%"></div>
+</div>
+</div>
+</div>
+<div class="mt-10 p-4 bg-white/40 rounded-xl">
+<p class="text-[11px] text-on-surface-variant italic leading-relaxed">
+                "Focus on the Literature Analysis today. It carries the highest weight for your final grade."
+              </p>
+<div class="flex items-center gap-2 mt-3">
+<div class="w-1.5 h-1.5 rounded-full bg-tertiary-container animate-pulse"></div>
+<span class="text-[9px] uppercase tracking-widest text-tertiary font-bold">Donna Tip</span>
+</div>
+</div>
+</div>
+<!-- Quick Stats -->
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-surface-container-lowest p-4 rounded-xl ghost-border">
+<p class="text-[10px] text-on-surface-variant uppercase tracking-tighter">Avg Score</p>
+<h4 class="text-xl font-light mt-1">A-</h4>
+</div>
+<div class="bg-surface-container-lowest p-4 rounded-xl ghost-border">
+<p class="text-[10px] text-on-surface-variant uppercase tracking-tighter">On Time</p>
+<h4 class="text-xl font-light mt-1">94%</h4>
+</div>
+</div>
+<!-- Decorative Image / Visual Soul -->
+<div class="relative h-48 rounded-2xl overflow-hidden shadow-sm">
+<img alt="Minimal Library" class="w-full h-full object-cover grayscale opacity-60" data-alt="Abstract view of a minimalist library with tall white shelves, soft shadows, and clean geometric lines in airy cool daylight" src="/images/assignments-library.jpg"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-low/80 to-transparent"></div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Mobile Navigation Shell -->
+<nav class="md:hidden fixed bottom-0 left-0 right-0 bg-slate-50/80 backdrop-blur-xl flex justify-around items-center py-4 px-6 z-50">
+<a class="text-slate-500 flex flex-col items-center gap-1" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-[9px] uppercase tracking-tighter">Overview</span>
+</a>
+<a class="text-slate-900 border-b border-slate-400 flex flex-col items-center gap-1" href="#">
+<span class="material-symbols-outlined">assignment</span>
+<span class="text-[9px] uppercase tracking-tighter">Tasks</span>
+</a>
+<a class="text-slate-500 flex flex-col items-center gap-1" href="#">
+<span class="material-symbols-outlined">calendar_month</span>
+<span class="text-[9px] uppercase tracking-tighter">Plan</span>
+</a>
+<a class="text-slate-500 flex flex-col items-center gap-1" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-[9px] uppercase tracking-tighter">Set</span>
+</a>
+</nav>

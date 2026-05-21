@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  background-color: #f8f9fa;
+  color: #2b3437;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3 {
+  font-family: 'Manrope', sans-serif;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 200, 'GRAD' 0, 'opsz' 24;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.ghost-border {
+  border: 1px solid rgba(171, 179, 183, 0.15);
+}
+
+.hover\:ghost-border:hover {
+  border: 1px solid rgba(171, 179, 183, 0.15);
+}
+
+.glass-panel {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.pedestal-shadow {
+  box-shadow:
+    0 30px 60px -12px rgba(70, 98, 112, 0.12),
+    0 18px 36px -18px rgba(0, 0, 0, 0.1);
+}
+
+.marker-gradient-1 {
+  background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+}
+
+.marker-gradient-2 {
+  background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+}
+
+.marker-gradient-3 {
+  background: linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%);
+}
+
+.custom-scrollbar::-webkit-scrollbar,
+.thin-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track,
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #d1dce0;
+  border-radius: 10px;
+}
+
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(115, 124, 127, 0.1);
+  border-radius: 10px;
+}
