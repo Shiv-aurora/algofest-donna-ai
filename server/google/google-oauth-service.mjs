@@ -2,29 +2,34 @@ import { fetchJson, HttpError } from '../lib/http.mjs'
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
+const GOOGLE_USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo'
 
 export function createGoogleOAuthService(config) {
   function isConfigured() {
     return Boolean(config.google?.clientId && config.google?.clientSecret)
   }
 
-  function buildAuthUrl(redirectUri, state) {
-    const scopes = Array.isArray(config.google.calendarScopes)
-      ? config.google.calendarScopes
-      : [
-          'https://www.googleapis.com/auth/calendar.readonly',
-          'https://www.googleapis.com/auth/calendar.events'
-        ]
+  function buildAuthUrl(redirectUri, state, options = {}) {
+    const scopes = Array.isArray(options.scopes) && options.scopes.length > 0
+      ? options.scopes
+      : Array.isArray(config.google.calendarScopes)
+        ? config.google.calendarScopes
+        : [
+            'https://www.googleapis.com/auth/calendar.readonly',
+            'https://www.googleapis.com/auth/calendar.events'
+          ]
 
     const params = new URLSearchParams({
       client_id: config.google.clientId,
       redirect_uri: redirectUri,
       response_type: 'code',
       scope: scopes.join(' '),
-      access_type: 'offline',
-      prompt: 'consent',
       state
     })
+
+    if (options.accessType) params.set('access_type', options.accessType)
+    if (options.prompt) params.set('prompt', options.prompt)
+    if (options.includeGrantedScopes) params.set('include_granted_scopes', 'true')
 
     return `${GOOGLE_AUTH_URL}?${params.toString()}`
   }
@@ -52,6 +57,25 @@ export function createGoogleOAuthService(config) {
       expiresIn: Number(payload.expires_in || 3600),
       scope: payload.scope || '',
       tokenType: payload.token_type || 'Bearer'
+    }
+  }
+
+  async function fetchUserProfile(accessToken) {
+    const payload = await fetchJson(GOOGLE_USERINFO_URL, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      }
+    })
+
+    if (!payload?.sub) {
+      throw new HttpError('Google profile response missing sub identifier.', 502, payload)
+    }
+
+    return {
+      sub: String(payload.sub),
+      email: String(payload.email || ''),
+      name: String(payload.name || payload.given_name || 'Google User'),
+      picture: String(payload.picture || '')
     }
   }
 
@@ -121,6 +145,7 @@ export function createGoogleOAuthService(config) {
     isConfigured,
     buildAuthUrl,
     exchangeCode,
+    fetchUserProfile,
     saveGoogleTokens,
     getValidAccessToken,
     clearGoogleTokens,
