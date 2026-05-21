@@ -2,6 +2,7 @@
   font-family: 'Inter', sans-serif;
   background: #f4f7f8;
   color: #1a1c1e;
+  overflow-x: hidden;
 }
 
 .landing-page h1,
@@ -166,5 +167,15 @@
   .landing-page__btn-ghost {
     width: 100%;
     justify-content: center;
+  }
+}
+
+
+@media (max-width: 1024px) {
+  .landing-page .relative.flex.h-80.w-80.items-center.justify-center {
+    width: min(100%, 320px);
+    height: min(100vw, 320px);
+    margin-left: auto;
+    margin-right: auto;
   }
 }

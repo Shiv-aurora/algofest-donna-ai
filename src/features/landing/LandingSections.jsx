@@ -312,6 +312,27 @@ export function LandingPreviewSection() {
           </aside>
         </div>
 
+        <div className="mt-8 grid gap-4 sm:grid-cols-2" data-reveal>
+          <article className="overflow-hidden rounded-xl border border-[#C4C7CF] bg-[#F8FAFB]">
+            <img
+              src="/images/landing/today-workspace.jpg"
+              alt="Today workspace preview"
+              className="h-44 w-full object-cover"
+              loading="lazy"
+            />
+            <div className="p-3 text-[13px] text-[#44474E]">Daily priorities and session guidance in one focused view.</div>
+          </article>
+          <article className="overflow-hidden rounded-xl border border-[#C4C7CF] bg-[#F8FAFB]">
+            <img
+              src="/images/landing/calendar-focus.jpg"
+              alt="Calendar planning preview"
+              className="h-44 w-full object-cover"
+              loading="lazy"
+            />
+            <div className="p-3 text-[13px] text-[#44474E]">Calendar-aware planning with actionable assignment context.</div>
+          </article>
+        </div>
+
         <div className="mt-10 grid gap-6 lg:grid-cols-2">
           <div data-reveal>
             <RhythmEngineVisual />

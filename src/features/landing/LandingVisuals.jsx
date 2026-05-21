@@ -80,15 +80,15 @@ export function RhythmEngineVisual() {
 export function NexusOrbVisual() {
   return (
     <div className="flex justify-center">
-      <div className="relative flex h-80 w-80 items-center justify-center">
+      <div className="relative flex h-[min(80vw,20rem)] w-[min(80vw,20rem)] items-center justify-center">
         <div className="absolute inset-0 rounded-full bg-[#78909C]/20 blur-[80px]" />
         <svg className="absolute inset-0 h-full w-full opacity-20" viewBox="0 0 400 400" aria-hidden="true">
           <circle cx="200" cy="200" r="150" fill="none" stroke="white" strokeDasharray="2 4" strokeWidth="0.5" />
           <circle cx="200" cy="200" r="100" fill="none" stroke="white" strokeDasharray="1 3" strokeWidth="0.5" />
           <circle cx="200" cy="200" r="58" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1" />
         </svg>
-        <div className="relative flex h-48 w-48 items-center justify-center rounded-full border border-white/20">
-          <div className="flex h-32 w-32 items-center justify-center rounded-full bg-[#FDFDFD] text-[#1A1C1E] shadow-[0_0_50px_rgba(120,144,156,0.3)]">
+        <div className="relative flex h-[60%] w-[60%] items-center justify-center rounded-full border border-white/20">
+          <div className="flex h-[66%] w-[66%] items-center justify-center rounded-full bg-[#FDFDFD] text-[#1A1C1E] shadow-[0_0_50px_rgba(120,144,156,0.3)]">
             <span className="material-symbols-outlined !text-5xl">hub</span>
           </div>
         </div>
