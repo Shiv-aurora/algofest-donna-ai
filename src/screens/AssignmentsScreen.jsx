@@ -1,8 +1,7 @@
-import AppShell from '../components/AppShell'
-import assignmentsHtml from '../fragments/assignments.html?raw'
+import MergedPlannerScreen from './MergedPlannerScreen'
 
 function AssignmentsScreen() {
-  return <AppShell activeRoute="assignments" html={assignmentsHtml} />
+  return <MergedPlannerScreen />
 }
 
 export default AssignmentsScreen

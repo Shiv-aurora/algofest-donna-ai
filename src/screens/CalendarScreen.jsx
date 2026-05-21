@@ -1,8 +1,7 @@
-import AppShell from '../components/AppShell'
-import calendarHtml from '../fragments/calendar.html?raw'
+import MergedPlannerScreen from './MergedPlannerScreen'
 
 function CalendarScreen() {
-  return <AppShell activeRoute="calendar" html={calendarHtml} />
+  return <MergedPlannerScreen />
 }
 
 export default CalendarScreen
