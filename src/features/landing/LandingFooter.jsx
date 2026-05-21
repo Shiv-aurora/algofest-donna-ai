@@ -4,71 +4,67 @@ const FOOTER_COLUMNS = [
   {
     title: 'Product',
     links: [
-      { label: 'Dashboard', href: '#interface' },
-      { label: 'Assessments', href: '#interface' }
-    ]
-  },
-  {
-    title: 'Integrations',
-    links: [
-      { label: 'Google Calendar', href: '#nexus' },
-      { label: 'LMS Sync', href: '#nexus' }
+      { label: 'Features', href: '#features' },
+      { label: 'Product preview', href: '#preview' },
+      { label: 'How it works', href: '#how' }
     ]
   },
   {
     title: 'Workflow',
     links: [
-      { label: 'Daily Planner', href: '#interface' },
-      { label: 'Focus Blocks', href: '#attention' }
+      { label: 'Assignments + Calendar', href: '#preview' },
+      { label: 'Study-block approvals', href: '#how' },
+      { label: 'Action history', href: '#trust' }
     ]
   },
   {
-    title: 'Get Started',
+    title: 'Trust',
     links: [
-      { label: 'How It Works', href: '#philosophy' },
-      { label: 'Open App', href: '#interface' }
+      { label: 'Approval-first model', href: '#trust' },
+      { label: 'Connectivity states', href: '#trust' },
+      { label: 'Status visibility', href: '#trust' }
     ]
   }
 ]
 
 function LandingFooter() {
   return (
-    <footer className="border-t border-black/5 bg-white px-8 py-20 md:px-16">
-      <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-12 md:flex-row md:items-center">
-        <div className="space-y-4">
-          <Link to="/" className="text-sm font-light uppercase tracking-[0.2em] text-[#1A1C1E]">
-            Donna <span className="opacity-50">AI</span>
-          </Link>
-          <p className="text-[10px] uppercase tracking-[0.3em] text-black/40">
-            Academic Planning Agent for High-Output Students.
-          </p>
+    <footer className="border-t border-black/10 bg-[#FDFDFD] px-8 py-16 md:px-16">
+      <div className="mx-auto max-w-7xl">
+        <div className="flex flex-col gap-10 md:flex-row md:items-start md:justify-between">
+          <div className="space-y-3">
+            <Link to="/" className="text-[20px] font-semibold tracking-[-0.02em] text-[#1A1C1E]">
+              Donna
+            </Link>
+            <p className="max-w-sm text-[12px] uppercase tracking-[0.18em] text-black/45">
+              Academic planning agent for execution-grade student workflows.
+            </p>
+            <Link to="/dashboard" className="landing-page__btn-primary landing-page__btn-primary--sm inline-flex">
+              Enter dashboard
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 gap-10 sm:grid-cols-3">
+            {FOOTER_COLUMNS.map((column) => (
+              <div key={column.title}>
+                <h5 className="mb-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#1A1C1E]">{column.title}</h5>
+                <ul className="space-y-2">
+                  {column.links.map((link) => (
+                    <li key={link.label}>
+                      <a href={link.href} className="text-[12px] text-[#44474E] transition-colors hover:text-[#1A1C1E]">
+                        {link.label}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-12 md:grid-cols-4">
-          {FOOTER_COLUMNS.map((column) => (
-            <div key={column.title}>
-              <h5 className="mb-4 text-[10px] font-bold uppercase tracking-[0.3em] text-[#1A1C1E]">
-                {column.title}
-              </h5>
-              <ul className="space-y-2">
-                {column.links.map((link) => (
-                  <li key={link.label}>
-                    <a
-                      href={link.href}
-                      className="text-[10px] uppercase tracking-[0.3em] text-black/50 transition-colors hover:text-[#78909C]"
-                    >
-                      {link.label}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+        <div className="mt-12 border-t border-black/10 pt-6 text-[11px] uppercase tracking-[0.2em] text-black/35">
+          © 2026 Donna. Built for reliable academic execution.
         </div>
-      </div>
-
-      <div className="mx-auto mt-20 max-w-7xl border-t border-black/5 pt-10 text-center text-[9px] uppercase tracking-[0.3em] text-black/30">
-        © 2026 Donna AI. Built for Better Study Decisions.
       </div>
     </footer>
   )
