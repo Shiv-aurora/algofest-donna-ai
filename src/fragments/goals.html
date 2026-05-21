@@ -1,0 +1,188 @@
+<div class="flex h-screen overflow-hidden">
+  <aside class="hidden md:flex flex-col h-full w-64 bg-slate-100/30 border-r border-slate-200/10 p-6 space-y-2">
+    <div class="flex items-center gap-3 mb-10 px-3">
+      <div class="w-8 h-8 bg-gradient-to-br from-primary to-primary-container rounded-lg flex items-center justify-center">
+        <span class="material-symbols-outlined text-on-primary text-sm">auto_awesome</span>
+      </div>
+      <div>
+        <h1 class="font-headline font-light text-slate-900 tracking-widest text-lg">Donna AI</h1>
+      </div>
+    </div>
+    <nav class="flex-1 space-y-1">
+      <a class="text-slate-500 p-3 flex items-center gap-3 hover:text-slate-800 transition-transform duration-200 hover:translate-x-1" href="#">
+        <span class="material-symbols-outlined">dashboard</span>
+        <span class="text-sm font-label tracking-wide">Dashboard</span>
+      </a>
+      <a class="text-slate-500 p-3 flex items-center gap-3 hover:text-slate-800 transition-transform duration-200 hover:translate-x-1" href="#">
+        <span class="material-symbols-outlined">assignment</span>
+        <span class="text-sm font-label tracking-wide">Assignments</span>
+      </a>
+      <a class="text-slate-500 p-3 flex items-center gap-3 hover:text-slate-800 transition-transform duration-200 hover:translate-x-1" href="#">
+        <span class="material-symbols-outlined">calendar_month</span>
+        <span class="text-sm font-label tracking-wide">Calendar</span>
+      </a>
+      <a class="text-slate-900 bg-white/50 rounded-xl shadow-sm p-3 flex items-center gap-3 transition-transform duration-200 hover:translate-x-1" href="#">
+        <span class="material-symbols-outlined">ads_click</span>
+        <span class="text-sm font-label tracking-wide">Goals</span>
+      </a>
+      <a class="text-slate-500 p-3 flex items-center gap-3 hover:text-slate-800 transition-transform duration-200 hover:translate-x-1" href="#">
+        <span class="material-symbols-outlined">settings</span>
+        <span class="text-sm font-label tracking-wide">Settings</span>
+      </a>
+    </nav>
+    <div class="mt-auto pt-5 border-t border-outline-variant/20">
+      <button class="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-white/50 transition-colors" data-action="toggle-account-menu">
+        <img alt="Account avatar" class="w-9 h-9 rounded-full object-cover border border-white/60" src="/images/overview-profile.jpg"/>
+        <div class="text-left">
+          <p class="text-sm font-medium text-on-surface" data-account-name>Shivam Arora</p>
+          <p class="text-[10px] uppercase tracking-widest text-on-surface-variant">Student Workspace</p>
+        </div>
+        <span class="material-symbols-outlined ml-auto text-on-surface-variant text-[18px]">expand_more</span>
+      </button>
+      <div class="hidden mt-3 bg-surface-container-low rounded-xl p-2 space-y-1" data-account-menu>
+        <button class="w-full text-left px-3 py-2 rounded-lg text-xs text-on-surface-variant hover:bg-surface-container-lowest transition-colors" data-action="account-profile">Profile</button>
+        <button class="w-full text-left px-3 py-2 rounded-lg text-xs text-on-surface-variant hover:bg-surface-container-lowest transition-colors" data-action="account-api-key">API Key</button>
+        <button class="w-full text-left px-3 py-2 rounded-lg text-xs text-error hover:bg-surface-container-lowest transition-colors" data-action="account-reset">Reset Local Data</button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="flex-1 min-h-screen overflow-y-auto">
+    <header class="sticky top-0 w-full z-30 px-8 h-16 flex items-center justify-between bg-white/80 backdrop-blur-xl shadow-[0px_20px_40px_rgba(43,52,55,0.02)]">
+      <div class="flex items-center bg-surface-container-low px-4 py-2 rounded-full w-96 ghost-border">
+        <span class="material-symbols-outlined text-outline-variant mr-2">search</span>
+        <input class="bg-transparent border-none focus:ring-0 text-sm font-manrope tracking-tight w-full placeholder:text-outline-variant" placeholder="Search insights..." type="text"/>
+      </div>
+      <div class="flex items-center gap-6">
+        <button class="material-symbols-outlined text-on-surface-variant hover:opacity-70 transition-opacity" data-action="show-notifications">notifications</button>
+      </div>
+    </header>
+
+    <div class="max-w-6xl mx-auto px-12 py-16">
+      <div class="mb-20">
+        <p class="font-label text-primary-dim tracking-[0.2em] text-[0.6875rem] uppercase mb-4">Focus Architecture</p>
+        <h2 class="font-headline font-light text-[3.5rem] leading-tight text-on-surface tracking-tight">Your Aspirations</h2>
+        <p class="font-body text-on-surface-variant max-w-xl mt-4 leading-relaxed">Defining the path to mastery. Your long-term objectives are curated here to reduce noise and maximize cognitive clarity.</p>
+      </div>
+
+      <div class="grid grid-cols-12 gap-8">
+        <div class="col-span-12 lg:col-span-8 bg-surface-container-lowest p-10 rounded-xl ghost-border flex flex-col justify-between min-h-[400px]">
+          <div class="flex justify-between items-start mb-12">
+            <div>
+              <span class="bg-tertiary-container/20 text-tertiary px-3 py-1 rounded-full text-[0.6875rem] font-label tracking-wider uppercase mb-4 inline-block">Academic Milestone</span>
+              <h3 class="font-headline font-light text-3xl text-on-surface">Thesis Completion</h3>
+              <p class="text-on-surface-variant mt-2 max-w-md">The Ethics of Decentralized AI Architectures in Modern Governance.</p>
+            </div>
+            <div class="text-right">
+              <span class="block text-4xl font-headline font-extralight text-primary">68%</span>
+              <span class="text-[0.6875rem] font-label text-outline-variant tracking-widest uppercase">Progress</span>
+            </div>
+          </div>
+          <div class="space-y-8">
+            <div class="relative h-1 w-full bg-surface-container rounded-full overflow-hidden">
+              <div class="absolute top-0 left-0 h-full bg-gradient-to-br from-primary to-primary-container w-[68%] rounded-full"></div>
+            </div>
+            <div class="grid grid-cols-3 gap-6">
+              <div class="p-4 bg-surface-container-low rounded-lg">
+                <span class="material-symbols-outlined text-primary mb-2">book</span>
+                <p class="text-[0.6875rem] font-label text-on-surface-variant uppercase tracking-widest">Literature</p>
+                <p class="text-sm font-medium">Complete</p>
+              </div>
+              <div class="p-4 bg-surface-container-low rounded-lg">
+                <span class="material-symbols-outlined text-primary mb-2">edit_note</span>
+                <p class="text-[0.6875rem] font-label text-on-surface-variant uppercase tracking-widest">Drafting</p>
+                <p class="text-sm font-medium">In Progress</p>
+              </div>
+              <div class="p-4 bg-surface-container-low/50 rounded-lg opacity-50">
+                <span class="material-symbols-outlined text-outline-variant mb-2">verified</span>
+                <p class="text-[0.6875rem] font-label text-on-surface-variant uppercase tracking-widest">Review</p>
+                <p class="text-sm font-medium">Pending</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-span-12 lg:col-span-4 bg-surface-container-low p-8 rounded-xl flex flex-col justify-between">
+          <div>
+            <span class="text-primary-dim text-[0.6875rem] font-label tracking-[0.1em] uppercase mb-4 inline-block">Career Strategy</span>
+            <h3 class="font-headline font-light text-2xl text-on-surface mb-6">Research Internship</h3>
+            <div class="space-y-6">
+              <div class="flex items-start gap-4">
+                <div class="w-6 h-6 rounded-full border-2 border-primary-container flex items-center justify-center flex-shrink-0 mt-1"><div class="w-2 h-2 rounded-full bg-primary"></div></div>
+                <div>
+                  <p class="text-sm font-medium text-on-surface">Curate Portfolio</p>
+                  <p class="text-xs text-on-surface-variant">Update 3 key projects with AI case studies.</p>
+                </div>
+              </div>
+              <div class="flex items-start gap-4">
+                <div class="w-6 h-6 rounded-full border-2 border-outline-variant flex items-center justify-center flex-shrink-0 mt-1"></div>
+                <div>
+                  <p class="text-sm font-medium text-on-surface">Contact Labs</p>
+                  <p class="text-xs text-on-surface-variant">Reach out to MIT and Stanford research leads.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="mt-12">
+            <img class="w-full h-32 object-cover rounded-lg ghost-border mb-4 grayscale" src="/images/overview-study.jpg" alt="Workspace"/>
+            <p class="text-xs font-label text-outline-variant uppercase tracking-widest">Next Action: Send Follow-up</p>
+          </div>
+        </div>
+
+        <div class="col-span-12 lg:col-span-7 bg-surface-container-low p-10 rounded-xl">
+          <div class="flex items-center gap-6 mb-8">
+            <div class="w-16 h-16 rounded-full bg-surface-container-lowest flex items-center justify-center ghost-border">
+              <span class="material-symbols-outlined text-primary text-3xl">code</span>
+            </div>
+            <div>
+              <h3 class="font-headline font-light text-2xl text-on-surface">Mastering LeetCode</h3>
+              <p class="text-xs font-label text-on-surface-variant uppercase tracking-widest mt-1">Technical Proficiency Path</p>
+            </div>
+          </div>
+          <div class="space-y-10">
+            <div>
+              <div class="flex justify-between text-xs font-label text-on-surface-variant uppercase tracking-widest mb-3"><span>Medium Challenges</span><span>42 / 150</span></div>
+              <div class="h-1 w-full bg-surface-container-high rounded-full"><div class="h-full bg-primary-dim w-[28%] rounded-full"></div></div>
+            </div>
+            <div class="grid grid-cols-2 gap-8">
+              <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-xl bg-primary-fixed flex items-center justify-center"><span class="material-symbols-outlined text-on-primary-fixed">hub</span></div>
+                <div><p class="text-sm font-medium">Dynamic Programming</p><p class="text-[0.6875rem] text-on-surface-variant">Focus area for this week</p></div>
+              </div>
+              <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-xl bg-secondary-fixed flex items-center justify-center"><span class="material-symbols-outlined text-on-secondary-fixed">account_tree</span></div>
+                <div><p class="text-sm font-medium">Graph Theory</p><p class="text-[0.6875rem] text-on-surface-variant">Mastered 12 patterns</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-span-12 lg:col-span-5 bg-tertiary/5 p-10 rounded-xl border border-tertiary-container/10 flex flex-col justify-between">
+          <div>
+            <h3 class="font-headline font-light text-2xl text-on-surface mb-2">Scientific German</h3>
+            <p class="text-on-surface-variant text-sm leading-relaxed mb-6">Language proficiency for international research colloquiums.</p>
+            <div class="flex gap-2">
+              <div class="h-2 w-8 bg-tertiary rounded-full"></div><div class="h-2 w-8 bg-tertiary rounded-full"></div><div class="h-2 w-8 bg-tertiary/20 rounded-full"></div><div class="h-2 w-8 bg-tertiary/20 rounded-full"></div>
+            </div>
+          </div>
+          <div class="pt-8">
+            <div class="flex items-center justify-between p-4 bg-white/40 backdrop-blur rounded-xl">
+              <div class="flex items-center gap-3"><span class="material-symbols-outlined text-tertiary">psychology</span><span class="text-sm font-medium">Daily Practice</span></div>
+              <span class="text-xs font-label text-tertiary-dim uppercase tracking-widest">Day 12 Streak</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-20 p-1 bg-surface-container-low rounded-full">
+        <div class="bg-surface-container-lowest rounded-full py-4 px-8 flex items-center justify-between ghost-border">
+          <div class="flex items-center gap-4">
+            <div class="w-2 h-2 bg-tertiary-container rounded-full animate-pulse"></div>
+            <p class="text-sm text-on-surface-variant tracking-tight"><span class="font-semibold text-on-surface">Donna's Observation:</span> Your thesis progress is accelerating. Would you like to schedule a deep-work block for Chapter 4 tomorrow?</p>
+          </div>
+          <button class="text-primary text-sm font-medium hover:underline">Schedule Focus</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
