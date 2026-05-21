@@ -6,7 +6,7 @@
 <span class="material-symbols-outlined text-on-primary text-sm">auto_awesome</span>
 </div>
 <div>
-<h1 class="font-headline font-light text-slate-900 tracking-widest text-lg">Donna AI</h1>
+<h1 class="font-headline font-light text-slate-900 tracking-widest text-lg">Donna</h1>
 </div>
 </div>
 <nav class="flex-1 space-y-1">
@@ -62,70 +62,16 @@
 </div>
 </header>
 <div class="px-10 pb-20 max-w-7xl mx-auto space-y-10">
-<!-- Greeting & Spotlight -->
 <section class="space-y-10">
 <div class="flex flex-col md:flex-row md:items-end justify-between gap-8">
 <div class="space-y-2">
 <h2 class="font-headline font-light text-4xl tracking-tight text-on-surface">Good morning, Shivam.</h2>
-<p class="text-on-surface-variant/70 max-w-md leading-relaxed">Your AI-optimized path for today is ready. Let's make progress.</p>
-</div>
-<!-- 3D Pedestal Spotlight Component -->
-<div class="relative group max-w-md w-full animate-float">
-<div class="absolute inset-0 bg-primary/10 blur-3xl rounded-full opacity-40 group-hover:opacity-60 transition-opacity animate-glow"></div>
-<div class="relative bg-white/40 backdrop-blur-md border border-white/50 rounded-full p-1 pedestal-shadow flex items-center gap-4">
-<div class="w-16 h-16 rounded-full marker-gradient-1 flex items-center justify-center text-white font-headline text-3xl font-light shadow-inner ring-4 ring-white/30">1</div>
-<div class="pr-8 py-2">
-<p class="text-[10px] font-semibold uppercase tracking-[0.2em] text-primary/60">Primary Focus</p>
-<h3 class="text-lg font-headline font-medium text-slate-800">Submit Biology Lab Report</h3>
-<p class="text-xs text-on-surface-variant">Due at 11:59 PM • <span class="text-error font-medium">Critical</span></p>
-</div>
-<div class="absolute -top-3 -right-3 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md">
-<span class="material-symbols-outlined text-primary text-lg" style="font-variation-settings: 'FILL' 1">auto_awesome</span>
 </div>
 </div>
-</div>
-</div>
-<!-- In Session Focus -->
-<div class="bg-surface-container-lowest ghost-border rounded-xl p-10 flex flex-col items-center justify-center relative overflow-hidden group">
-<div class="absolute top-0 right-0 w-64 h-64 bg-primary-container/10 blur-[100px] rounded-full -mr-32 -mt-32"></div>
-<header class="text-center mb-8 z-10">
-<span class="text-[10px] uppercase tracking-[0.2em] text-on-surface-variant font-bold">In Session</span>
-<h3 class="text-3xl font-light mt-2">Systems Homework</h3>
-</header>
-<div class="text-center z-10">
-<div class="font-headline font-light text-[112px] leading-none tracking-tighter text-slate-800 flex items-baseline" data-session-timer data-seconds="2538">
-                                42<span class="text-4xl text-slate-300 mx-2">:</span>18
-                            </div>
-<p class="text-sm text-on-surface-variant/60 tracking-widest mt-4">Remaining for Deep Work</p>
-</div>
-<div class="flex items-center gap-4 mt-10 z-10">
-<button class="px-8 py-3 bg-on-surface text-surface rounded-full text-sm font-medium tracking-wide hover:scale-[0.99] transition-transform flex items-center gap-2" data-action="pause-session">
-<span class="material-symbols-outlined" data-icon="pause">pause</span>
-                                Pause Session
-                            </button>
-<button class="px-8 py-3 bg-surface-container-high text-on-surface rounded-full text-sm font-medium tracking-wide hover:bg-surface-container-highest transition-colors flex items-center gap-2" data-action="replan-session">
-<span class="material-symbols-outlined" data-icon="rebase_edit">rebase_edit</span>
-                                Replan
-                            </button>
-</div>
-</div>
-<!-- AI Synopsis Banner -->
-<div class="relative group overflow-hidden bg-gradient-to-br from-primary/5 to-primary-container/20 p-8 rounded-full ghost-border flex items-start gap-6">
-<div class="w-12 h-12 rounded-full bg-white flex-shrink-0 flex items-center justify-center shadow-sm">
-<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
-</div>
-<div class="space-y-1">
-<h3 class="font-label text-xs font-semibold uppercase tracking-[0.2em] text-primary/70">AI Synopsis</h3>
-<p class="font-headline text-xl font-light text-slate-700 leading-relaxed">
-                                You have <span class="font-medium text-slate-900 underline decoration-primary/20">2 urgent deadlines</span>, 1 class in 45 minutes, and enough free time to finish your econ reading today.
-                            </p>
-</div>
-</div>
+<div class="w-full" data-ai-clock-slot></div>
 </section>
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
-<!-- Column 1 & 2: Main Focus -->
 <div class="lg:col-span-2 space-y-12">
-<!-- Today's Priorities (Redesigned with Marker System) -->
 <section>
 <div class="flex items-center justify-between mb-8">
 <div class="flex items-center gap-3">
@@ -135,7 +81,6 @@
 <button class="text-xs font-label text-on-surface-variant hover:text-primary transition-colors" data-action="optimize-priorities">Optimize Order</button>
 </div>
 <div class="space-y-3" data-priority-list>
-<!-- Priority 1 (Moved from spotlight ref) -->
 <div class="bg-white p-5 rounded-full ghost-border flex items-center justify-between hover:shadow-lg hover:shadow-slate-200/50 transition-all cursor-grab active:cursor-grabbing group" data-priority-item data-priority-id="p1" data-priority-rank="1">
 <div class="flex items-center gap-6">
 <div class="w-12 h-12 rounded-full marker-gradient-1 flex items-center justify-center text-white font-headline text-2xl font-light">1</div>
@@ -146,7 +91,6 @@
 </div>
 <span class="material-symbols-outlined text-slate-300 group-hover:text-slate-400">drag_indicator</span>
 </div>
-<!-- Priority 2 -->
 <div class="bg-white p-5 rounded-full ghost-border flex items-center justify-between hover:shadow-lg hover:shadow-slate-200/50 transition-all cursor-grab active:cursor-grabbing group" data-priority-item data-priority-id="p2" data-priority-rank="2">
 <div class="flex items-center gap-6">
 <div class="w-12 h-12 rounded-full marker-gradient-2 flex items-center justify-center text-white font-headline text-2xl font-light">2</div>
@@ -157,7 +101,6 @@
 </div>
 <span class="material-symbols-outlined text-slate-300 group-hover:text-slate-400">drag_indicator</span>
 </div>
-<!-- Priority 3 -->
 <div class="bg-white p-5 rounded-full ghost-border flex items-center justify-between hover:shadow-lg hover:shadow-slate-200/50 transition-all cursor-grab active:cursor-grabbing group" data-priority-item data-priority-id="p3" data-priority-rank="3">
 <div class="flex items-center gap-6">
 <div class="w-12 h-12 rounded-full marker-gradient-3 flex items-center justify-center text-white font-headline text-2xl font-light">3</div>
@@ -170,7 +113,6 @@
 </div>
 </div>
 </section>
-<!-- Today's Plan (Timeline) -->
 <section>
 <div class="flex items-center justify-between mb-8">
 <h4 class="font-headline font-light text-xl tracking-tight">Today's Plan</h4>
@@ -239,7 +181,6 @@
 </div>
 </section>
 </div>
-<!-- Column 3: Sidebar Contextual -->
 <div class="space-y-8">
 <!-- At-Risk Assignments -->
 <section>

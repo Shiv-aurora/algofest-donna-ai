@@ -1,6 +1,8 @@
-import { useEffect, useLayoutEffect, useRef } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { createRoot } from 'react-dom/client'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useDashboard } from '../state/DashboardProvider'
+import DashboardClockAi from './ui/dashboard-clock-ai'
 
 const ROUTE_CLASSES = {
   dashboard: 'bg-surface text-on-surface antialiased',
@@ -14,6 +16,8 @@ const ROUTE_CLASSES = {
 function AppShell({ activeRoute, html }) {
   const containerRef = useRef(null)
   const mountedHtmlRef = useRef('')
+  const aiClockMountRef = useRef(null)
+  const runPlannerRef = useRef(() => {})
   const navigate = useNavigate()
   const location = useLocation()
   const {
@@ -23,6 +27,7 @@ function AppShell({ activeRoute, html }) {
     setAccountMenuOpen,
     setApiKeyEditorOpen,
     setChatOpen,
+    sending,
     toggleSessionPause,
     reorderPriorities,
     runPlanner,
@@ -31,15 +36,61 @@ function AppShell({ activeRoute, html }) {
 
   const className = ROUTE_CLASSES[activeRoute] ?? ROUTE_CLASSES.dashboard
 
+  useEffect(() => {
+    runPlannerRef.current = runPlanner
+  }, [runPlanner])
+
+  const renderAiClock = useCallback(() => {
+    if (!aiClockMountRef.current) return
+    aiClockMountRef.current.render(
+      <DashboardClockAi
+        isLoading={sending}
+        onAskDonna={(message) => {
+          const text = String(message || '').trim()
+          if (!text) return
+          runPlannerRef.current(text, 'replan')
+        }}
+      />
+    )
+  }, [sending])
+
   useLayoutEffect(() => {
     const root = containerRef.current
     if (!root) return
+
+    if (aiClockMountRef.current) {
+      aiClockMountRef.current.unmount()
+      aiClockMountRef.current = null
+    }
 
     if (mountedHtmlRef.current !== html) {
       root.innerHTML = html
       mountedHtmlRef.current = html
     }
-  }, [html])
+
+    if (activeRoute === 'dashboard') {
+      const aiClockSlot = root.querySelector('[data-ai-clock-slot]')
+      if (aiClockSlot) {
+        const mountedRoot = createRoot(aiClockSlot)
+        aiClockMountRef.current = mountedRoot
+        renderAiClock()
+      }
+    }
+  }, [activeRoute, html, renderAiClock])
+
+  useEffect(() => {
+    if (activeRoute !== 'dashboard') return
+    renderAiClock()
+  }, [activeRoute, renderAiClock])
+
+  useEffect(() => {
+    return () => {
+      if (aiClockMountRef.current) {
+        aiClockMountRef.current.unmount()
+        aiClockMountRef.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     const root = containerRef.current
@@ -52,13 +103,6 @@ function AppShell({ activeRoute, html }) {
     if (accountMenu) accountMenu.classList.toggle('hidden', !accountMenuOpen)
 
     if (activeRoute !== 'dashboard') return undefined
-
-    const timerEl = root.querySelector('[data-session-timer]')
-    if (timerEl) {
-      const minutes = Math.floor(dashboard.session.remainingSeconds / 60)
-      const seconds = dashboard.session.remainingSeconds % 60
-      timerEl.innerHTML = `${minutes}<span class="text-4xl text-slate-300 mx-2">:</span>${String(seconds).padStart(2, '0')}`
-    }
 
     const pauseButton = root.querySelector('[data-action="pause-session"]')
     if (pauseButton) {

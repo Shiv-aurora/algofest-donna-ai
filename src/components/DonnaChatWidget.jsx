@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useDashboard } from '../state/DashboardProvider'
+import DashboardClockBackground from '../../background'
 
 const MotionButton = motion.button
 const MotionPanel = motion.div
@@ -53,13 +54,18 @@ function DonnaChatWidget() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.94 }}
             transition={{ duration: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
-            className="group flex items-center gap-3 rounded-full bg-surface-container-lowest px-4 py-3 ghost-border shadow-[0_20px_40px_rgba(43,52,55,0.08)] transition-transform hover:scale-[1.01]"
+            className="group rounded-full transition-transform hover:scale-[1.01]"
           >
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-container text-on-primary font-headline text-sm">
-              DA
-            </span>
-            <span className="text-sm text-on-surface-variant">Donna AI</span>
-            <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+            <DashboardClockBackground
+              variant="subtle"
+              timeScale={0.28}
+              className="rounded-full bg-[#a3adb8]/85 border border-white/35 px-5 py-2.5 shadow-[0_20px_40px_rgba(43,52,55,0.16)]"
+            >
+              <span className="flex items-center gap-3">
+                <span className="text-[24px] leading-none font-light tracking-[0.04em] text-slate-800/80 lowercase">donna</span>
+                <span className="h-2.5 w-2.5 rounded-full bg-[#68727a]/80 animate-pulse" />
+              </span>
+            </DashboardClockBackground>
           </MotionButton>
         ) : (
           <MotionPanel
@@ -73,11 +79,8 @@ function DonnaChatWidget() {
           >
           <header className="flex items-center justify-between px-4 py-3 bg-surface-container-low border-b border-outline-variant/20">
             <div className="flex items-center gap-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-container text-on-primary text-xs font-semibold">
-                DA
-              </span>
               <div>
-                <p className="text-sm font-medium text-on-surface">Donna AI</p>
+                <p className="text-sm font-medium text-on-surface">Donna</p>
                 <p className="text-[10px] tracking-wide uppercase text-on-surface-variant">{statusText}</p>
               </div>
             </div>

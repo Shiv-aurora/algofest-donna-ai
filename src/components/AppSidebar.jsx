@@ -37,7 +37,7 @@ function AppSidebar() {
           <span className="material-symbols-outlined text-on-primary text-sm">auto_awesome</span>
         </div>
         <div>
-          <h1 className="font-headline font-light text-slate-900 tracking-widest text-lg">Donna AI</h1>
+          <h1 className="font-headline font-light text-slate-900 tracking-widest text-lg">Donna</h1>
         </div>
       </div>
 
