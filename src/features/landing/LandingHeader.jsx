@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { LANDING_ANCHORS, LANDING_ROUTES } from './landingLinks'
 
 const NAV_ITEMS = [
-  { label: 'How it works', href: '#how' },
-  { label: 'Features', href: '#features' },
-  { label: 'Product', href: '#preview' },
-  { label: 'Trust', href: '#trust' }
+  { label: 'How it works', href: LANDING_ANCHORS.how },
+  { label: 'Features', href: LANDING_ANCHORS.features },
+  { label: 'Product', href: LANDING_ANCHORS.preview },
+  { label: 'Trust', href: LANDING_ANCHORS.trust }
 ]
 
 function LandingHeader() {
@@ -20,7 +21,7 @@ function LandingHeader() {
   return (
     <header className={`landing-page__nav ${scrolled ? 'landing-page__nav--scrolled' : ''}`}>
       <div className="mx-auto flex h-[68px] max-w-7xl items-center justify-between px-8 md:px-16">
-        <Link to="/" className="text-[20px] font-semibold tracking-[-0.02em] text-[#1A1C1E]">
+        <Link to={LANDING_ROUTES.home} className="text-[20px] font-semibold tracking-[-0.02em] text-[#1A1C1E]">
           Donna
         </Link>
 
@@ -32,7 +33,7 @@ function LandingHeader() {
           ))}
         </nav>
 
-        <Link to="/dashboard" className="landing-page__btn-primary landing-page__btn-primary--sm">
+        <Link to={LANDING_ROUTES.app} className="landing-page__btn-primary landing-page__btn-primary--sm">
           Open app
         </Link>
       </div>

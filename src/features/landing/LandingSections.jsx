@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { LANDING_ANCHORS, LANDING_ROUTES } from './landingLinks'
 import { NexusOrbVisual, RhythmEngineVisual } from './LandingVisuals'
 
 const PROBLEM_POINTS = [
@@ -100,11 +101,11 @@ export function LandingHeroSection() {
           </p>
 
           <div className="mt-9 flex flex-wrap items-center gap-3">
-            <Link to="/dashboard" className="landing-page__btn-primary">
+            <Link to={LANDING_ROUTES.app} className="landing-page__btn-primary">
               Start with Donna
               <span aria-hidden="true">↗</span>
             </Link>
-            <a href="#preview" className="landing-page__btn-ghost">
+            <a href={LANDING_ANCHORS.preview} className="landing-page__btn-ghost">
               See product preview
             </a>
           </div>
@@ -152,7 +153,7 @@ export function LandingHeroSection() {
 
               <div className="flex items-center justify-between rounded-xl bg-[#1A1C1E] px-3 py-2 text-[12px] text-white">
                 <span>2 blocks awaiting approval</span>
-                <Link to="/dashboard" className="rounded-md border border-white/20 px-2 py-1 text-[11px]">
+                <Link to={LANDING_ROUTES.app} className="rounded-md border border-white/20 px-2 py-1 text-[11px]">
                   Open app
                 </Link>
               </div>
@@ -305,7 +306,7 @@ export function LandingPreviewSection() {
               <p className="mt-1 text-sm text-[#1A1C1E]">Latest statuses remain visible: proposed, approved, executed, failed.</p>
             </div>
 
-            <Link to="/dashboard" className="landing-page__btn-primary inline-flex">
+            <Link to={LANDING_ROUTES.app} className="landing-page__btn-primary inline-flex">
               Open live app
             </Link>
           </aside>
@@ -351,7 +352,7 @@ export function LandingTrustSection() {
 
 export function LandingFinalCtaSection() {
   return (
-    <section className="landing-page__final relative overflow-hidden px-8 py-28 text-center text-white md:px-16" data-reveal>
+    <section id="cta" className="landing-page__final relative overflow-hidden px-8 py-28 text-center text-white md:px-16" data-reveal>
       <div className="mx-auto max-w-4xl">
         <SectionKicker>Free for students</SectionKicker>
         <h2 className="font-headline text-[clamp(40px,5vw,66px)] font-bold tracking-[-0.03em]">
@@ -363,10 +364,10 @@ export function LandingFinalCtaSection() {
           Open the app, review the proposed day, and approve the study blocks that should hit your calendar.
         </p>
         <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-          <Link to="/dashboard" className="landing-page__btn-primary">
+          <Link to={LANDING_ROUTES.app} className="landing-page__btn-primary">
             Start with Donna
           </Link>
-          <a href="#preview" className="landing-page__btn-ghost landing-page__btn-ghost--dark">
+          <a href={LANDING_ANCHORS.preview} className="landing-page__btn-ghost landing-page__btn-ghost--dark">
             See planned-day preview
           </a>
         </div>
