@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "context-compass": {
+      "command": "context-compass",
+      "args": [
+        "serve"
+      ],
+      "env": {}
+    }
+  }
+}

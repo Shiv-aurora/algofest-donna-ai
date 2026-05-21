@@ -1,0 +1,154 @@
+{
+  "actions": [
+    {
+      "id": "action_1775504754344_y9mmvapq",
+      "userId": "demo|student",
+      "type": "create_study_block",
+      "status": "executed",
+      "payload": {
+        "title": "Demo Study Tonight",
+        "start": "2026-04-06T20:00:00.000Z",
+        "end": "2026-04-06T21:00:00.000Z",
+        "description": "Hackathon demo",
+        "source": "donna",
+        "metadata": {
+          "createdBy": "donna",
+          "createdAt": "2026-04-06T19:45:54.344Z"
+        }
+      },
+      "createdAt": "2026-04-06T19:45:54.344Z",
+      "updatedAt": "2026-04-06T19:45:54.399Z",
+      "history": [
+        {
+          "status": "proposed",
+          "at": "2026-04-06T19:45:54.344Z",
+          "message": "Action proposed by Donna."
+        },
+        {
+          "status": "approved",
+          "at": "2026-04-06T19:45:54.399Z",
+          "message": "Action approved by user."
+        },
+        {
+          "status": "executed",
+          "at": "2026-04-06T19:45:54.399Z",
+          "message": "Action executed successfully."
+        }
+      ],
+      "approvedAt": "2026-04-06T19:45:54.399Z",
+      "result": {
+        "googleEventId": "demo-created-1775504754399",
+        "htmlLink": "",
+        "start": {
+          "dateTime": "2026-04-06T20:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-04-06T21:00:00.000Z"
+        }
+      },
+      "executedAt": "2026-04-06T19:45:54.399Z"
+    },
+    {
+      "id": "action_1775504891296_4ynbj8kl",
+      "userId": "demo|student",
+      "type": "create_study_block",
+      "status": "executed",
+      "payload": {
+        "title": "Study Block: Organic Chem Lab Prep",
+        "start": "2026-04-07T00:00:00.000Z",
+        "end": "2026-04-07T01:00:00.000Z",
+        "description": "Donna suggestion from planning flow. Context: Assignment for Chem 301",
+        "source": "donna",
+        "metadata": {
+          "createdBy": "donna",
+          "createdAt": "2026-04-06T19:48:11.296Z",
+          "intent": "study_block",
+          "trigger": "ask_donna_schedule",
+          "targetLabel": "Schedule it for today"
+        }
+      },
+      "createdAt": "2026-04-06T19:48:11.296Z",
+      "updatedAt": "2026-04-06T19:48:15.910Z",
+      "history": [
+        {
+          "status": "proposed",
+          "at": "2026-04-06T19:48:11.296Z",
+          "message": "Action proposed by Donna."
+        },
+        {
+          "status": "approved",
+          "at": "2026-04-06T19:48:15.908Z",
+          "message": "Action approved by user."
+        },
+        {
+          "status": "executed",
+          "at": "2026-04-06T19:48:15.910Z",
+          "message": "Action executed successfully."
+        }
+      ],
+      "approvedAt": "2026-04-06T19:48:15.908Z",
+      "result": {
+        "googleEventId": "demo-created-1775504895910",
+        "htmlLink": "",
+        "start": {
+          "dateTime": "2026-04-07T00:00:00.000Z"
+        },
+        "end": {
+          "dateTime": "2026-04-07T01:00:00.000Z"
+        }
+      },
+      "executedAt": "2026-04-06T19:48:15.910Z"
+    },
+    {
+      "id": "action_1775504908618_5hn76w9c",
+      "userId": "demo|student",
+      "type": "create_study_block",
+      "status": "executed",
+      "payload": {
+        "title": "Study Block: Secure summer research internship",
+        "start": "2026-04-06T21:31:53.307Z",
+        "end": "2026-04-06T23:01:53.307Z",
+        "description": "Donna suggestion from planning flow. Context: Refine portfolio, send outreach, and complete target lab follow-ups.",
+        "source": "donna",
+        "metadata": {
+          "createdBy": "donna",
+          "createdAt": "2026-04-06T19:48:28.618Z",
+          "intent": "study_block",
+          "trigger": "ask_donna_schedule",
+          "targetLabel": "By June 15"
+        }
+      },
+      "createdAt": "2026-04-06T19:48:28.618Z",
+      "updatedAt": "2026-04-06T19:49:22.773Z",
+      "history": [
+        {
+          "status": "proposed",
+          "at": "2026-04-06T19:48:28.618Z",
+          "message": "Action proposed by Donna."
+        },
+        {
+          "status": "approved",
+          "at": "2026-04-06T19:49:22.772Z",
+          "message": "Action approved by user."
+        },
+        {
+          "status": "executed",
+          "at": "2026-04-06T19:49:22.773Z",
+          "message": "Action executed successfully."
+        }
+      ],
+      "approvedAt": "2026-04-06T19:49:22.772Z",
+      "result": {
+        "googleEventId": "demo-created-1775504962773",
+        "htmlLink": "",
+        "start": {
+          "dateTime": "2026-04-06T21:31:53.307Z"
+        },
+        "end": {
+          "dateTime": "2026-04-06T23:01:53.307Z"
+        }
+      },
+      "executedAt": "2026-04-06T19:49:22.773Z"
+    }
+  ]
+}

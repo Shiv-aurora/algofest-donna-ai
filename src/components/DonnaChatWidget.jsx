@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useDashboard } from '../state/DashboardProvider'
 import DashboardClockBackground from '../../background'
@@ -12,8 +12,16 @@ function DonnaChatWidget() {
     chatOpen,
     setChatOpen,
     sending,
+    authConnectivity,
     hasApiKey,
     runPlanner,
+    donnaActions,
+    donnaActionsLoading,
+    donnaActionsError,
+    donnaActionExecution,
+    fetchDonnaActions,
+    approveStudyBlockAction,
+    proposeStudyBlockAction,
     setApiKeySession,
     clearApiKey,
     apiKeyEditorOpen,
@@ -22,12 +30,45 @@ function DonnaChatWidget() {
 
   const [draft, setDraft] = useState('')
   const [keyDraft, setKeyDraft] = useState('')
+  const [actionStatusMessage, setActionStatusMessage] = useState('')
 
   const statusText = useMemo(() => {
     if (sending) return 'Thinking...'
+    if (authConnectivity?.state === 'connected_ready') return 'Calendar connected'
+    if (authConnectivity?.state === 'unauthenticated') return 'Login required'
+    if (authConnectivity?.state === 'authenticated_unconnected') return 'Connect Google Calendar'
     if (hasApiKey) return 'BYOK connected'
     return 'Local planner mode'
-  }, [hasApiKey, sending])
+  }, [authConnectivity?.state, hasApiKey, sending])
+
+  const recentDonnaActions = useMemo(
+    () =>
+      [...donnaActions]
+        .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime())
+        .slice(0, 4),
+    [donnaActions]
+  )
+
+  useEffect(() => {
+    if (chatOpen) {
+      fetchDonnaActions({ silent: true })
+    }
+  }, [chatOpen, fetchDonnaActions])
+
+  const toLocalTimeRange = (action) => {
+    const start = action?.payload?.start ? new Date(action.payload.start) : null
+    const end = action?.payload?.end ? new Date(action.payload.end) : null
+    if (!start || Number.isNaN(start.getTime()) || !end || Number.isNaN(end.getTime())) return 'Time pending'
+    const options = { hour: 'numeric', minute: '2-digit' }
+    return `${start.toLocaleTimeString([], options)} - ${end.toLocaleTimeString([], options)}`
+  }
+
+  const statusChipClass = (status) => {
+    if (status === 'executed') return 'bg-secondary-container/40 text-on-secondary-container'
+    if (status === 'failed') return 'bg-error-container/30 text-error'
+    if (status === 'approved') return 'bg-primary-container/50 text-on-primary-container'
+    return 'bg-surface-container-high text-on-surface-variant'
+  }
 
   const onSubmit = async (event) => {
     event.preventDefault()
@@ -41,6 +82,31 @@ function DonnaChatWidget() {
     setApiKeySession(keyDraft)
     setApiKeyEditorOpen(false)
     setKeyDraft('')
+  }
+
+  const handleApproveAction = async (action) => {
+    if (!action?.id) return
+    setActionStatusMessage('')
+    const result = await approveStudyBlockAction(action.id)
+    if (result?.ok) {
+      setActionStatusMessage('Study block created in Google Calendar.')
+      return
+    }
+    setActionStatusMessage(result?.message || 'Study block execution failed.')
+  }
+
+  const handleRetryAction = async (action) => {
+    if (!action?.payload) return
+    setActionStatusMessage('')
+    const proposal = await proposeStudyBlockAction({
+      ...action.payload,
+      metadata: { ...(action.payload.metadata || {}), trigger: 'widget_retry' }
+    })
+    if (proposal?.ok) {
+      setActionStatusMessage('Study block re-proposed. Approve to execute.')
+      return
+    }
+    setActionStatusMessage(proposal?.message || 'Unable to re-propose study block.')
   }
 
   return (
@@ -137,6 +203,79 @@ function DonnaChatWidget() {
             >
               Optimize This Plan For Today
             </button>
+          </div>
+
+          <div className="px-4 pb-2">
+            <div className="rounded-xl bg-surface-container-low p-3 border border-outline-variant/20">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] uppercase tracking-widest text-on-surface-variant">Donna Actions</p>
+                <button
+                  className="text-[10px] text-on-surface-variant hover:text-primary"
+                  onClick={() => fetchDonnaActions()}
+                >
+                  Refresh
+                </button>
+              </div>
+
+              {donnaActionsLoading && <p className="text-[11px] text-on-surface-variant">Loading actions...</p>}
+              {!donnaActionsLoading && recentDonnaActions.length === 0 && (
+                <p className="text-[11px] text-on-surface-variant">No study block actions yet.</p>
+              )}
+              {!donnaActionsLoading && recentDonnaActions.length > 0 && (
+                <div className="space-y-2">
+                  {recentDonnaActions.map((action) => {
+                    const inFlight =
+                      donnaActionExecution.inFlight && donnaActionExecution.actionId === action.id
+                    return (
+                      <div key={action.id} className="rounded-lg bg-surface-container-lowest border border-outline-variant/20 p-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-xs font-medium text-on-surface">{action.payload.title || 'Study Block'}</p>
+                            <p className="text-[10px] text-on-surface-variant">{toLocalTimeRange(action)}</p>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wide ${statusChipClass(action.status)}`}>
+                            {action.status}
+                          </span>
+                        </div>
+
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                          <p className="text-[10px] text-on-surface-variant">
+                            {action.updatedAt
+                              ? new Date(action.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+                              : ''}
+                          </p>
+                          {action.status === 'proposed' && (
+                            <button
+                              disabled={inFlight || donnaActionExecution.inFlight}
+                              onClick={() => handleApproveAction(action)}
+                              className="px-2.5 py-1 rounded-full text-[10px] bg-on-surface text-surface disabled:opacity-50"
+                            >
+                              {inFlight ? 'Approving...' : 'Approve'}
+                            </button>
+                          )}
+                          {action.status === 'failed' && (
+                            <button
+                              disabled={donnaActionExecution.inFlight}
+                              onClick={() => handleRetryAction(action)}
+                              className="px-2.5 py-1 rounded-full text-[10px] bg-surface-container-high text-on-surface-variant disabled:opacity-50"
+                            >
+                              Retry
+                            </button>
+                          )}
+                        </div>
+                        {action.status === 'failed' && action.error && (
+                          <p className="mt-1 text-[10px] text-error line-clamp-2">{action.error}</p>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              {!donnaActionsLoading && donnaActionsError?.message && (
+                <p className="mt-2 text-[10px] text-error">{donnaActionsError.message}</p>
+              )}
+              {actionStatusMessage && <p className="mt-2 text-[10px] text-on-surface-variant">{actionStatusMessage}</p>}
+            </div>
           </div>
 
           <div className="h-[320px] overflow-y-auto px-4 pb-4 space-y-3 thin-scrollbar">

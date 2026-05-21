@@ -1,0 +1,30 @@
+{
+  "today": {
+    "date": "2026-04-06",
+    "prompts": 4,
+    "savedTokens": 22691
+  },
+  "week": {
+    "weekKey": "2026-W15",
+    "prompts": 4,
+    "savedTokens": 22691
+  },
+  "index": {
+    "functions": 155,
+    "connections": 106,
+    "lastUpdatedAt": 1775508479542
+  },
+  "topDomains": {
+    "now": 2,
+    "one": 1,
+    "real": 1,
+    "react": 1,
+    "router": 1,
+    "future": 1,
+    "app": 1,
+    "nope": 1,
+    "aith0": 1,
+    "console": 1,
+    "didnt": 1
+  }
+}

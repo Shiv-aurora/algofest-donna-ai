@@ -3,15 +3,13 @@ import { useDashboard } from '../state/DashboardProvider'
 
 const NAV_ITEMS = [
   { key: 'dashboard', label: 'Dashboard', icon: 'dashboard', to: '/dashboard' },
-  { key: 'assignments', label: 'Assignments', icon: 'assignment', to: '/assignments' },
-  { key: 'calendar', label: 'Calendar', icon: 'calendar_month', to: '/calendar' },
+  { key: 'assessments', label: 'Assessments', icon: 'assignment', to: '/assignments' },
   { key: 'goals', label: 'Goals', icon: 'ads_click', to: '/goals' },
   { key: 'settings', label: 'Settings', icon: 'settings', to: '/settings' }
 ]
 
 function routeKey(pathname) {
-  if (pathname.startsWith('/assignments')) return 'assignments'
-  if (pathname.startsWith('/calendar')) return 'calendar'
+  if (pathname.startsWith('/assignments') || pathname.startsWith('/calendar')) return 'assessments'
   if (pathname.startsWith('/goals')) return 'goals'
   if (pathname.startsWith('/settings')) return 'settings'
   return 'dashboard'
@@ -115,4 +113,3 @@ function AppSidebar() {
 }
 
 export default AppSidebar
-

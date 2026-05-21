@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   DEFAULT_ASPIRATIONS,
   DEFAULT_ASPIRATION_SESSIONS,
@@ -23,9 +23,16 @@ import {
   runOpenAIPlanner
 } from './dashboardEngine'
 import {
+  ConnectivityApiError,
+  approveDonnaAction,
   connectProviderApi,
   disconnectProviderApi,
   fetchProviders,
+  getDonnaCalendarContext,
+  getAuthMe,
+  listDonnaActions,
+  logoutAuth,
+  proposeStudyBlock,
   syncProviderApi
 } from './connectivityApi'
 
@@ -165,6 +172,166 @@ function aspirationProgressDelta(currentProgress, minutes) {
   return Math.max(1, Math.round(9 * effortScale * easing))
 }
 
+function toIsoOrNull(value) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toISOString()
+}
+
+function addMinutes(isoString, minutes) {
+  const date = new Date(isoString)
+  if (Number.isNaN(date.getTime())) return null
+  date.setMinutes(date.getMinutes() + minutes)
+  return date.toISOString()
+}
+
+function normalizeDonnaAction(item, index = 0) {
+  const raw = item && typeof item === 'object' ? item : {}
+  const payload = raw.payload && typeof raw.payload === 'object' ? raw.payload : {}
+  const result = raw.result && typeof raw.result === 'object' ? raw.result : null
+  return {
+    id: String(raw.id || uid(`donna-action-${index}`)),
+    type: String(raw.type || 'create_study_block'),
+    status: String(raw.status || 'proposed'),
+    payload: {
+      title: String(payload.title || ''),
+      start: String(payload.start || ''),
+      end: String(payload.end || ''),
+      description: String(payload.description || ''),
+      source: String(payload.source || 'donna'),
+      metadata: payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {}
+    },
+    result: result
+      ? {
+          googleEventId: String(result.googleEventId || ''),
+          htmlLink: String(result.htmlLink || ''),
+          start: String(result.start?.dateTime || result.start?.date || result.start || ''),
+          end: String(result.end?.dateTime || result.end?.date || result.end || '')
+        }
+      : null,
+    error: raw.error ? String(raw.error) : '',
+    createdAt: String(raw.createdAt || ''),
+    updatedAt: String(raw.updatedAt || ''),
+    approvedAt: raw.approvedAt ? String(raw.approvedAt) : '',
+    executedAt: raw.executedAt ? String(raw.executedAt) : '',
+    history: Array.isArray(raw.history)
+      ? raw.history.map((entry, entryIndex) => ({
+          id: `${raw.id || 'action'}-h-${entryIndex}`,
+          status: String(entry?.status || ''),
+          at: String(entry?.at || ''),
+          message: String(entry?.message || '')
+        }))
+      : []
+  }
+}
+
+function toCanonicalFailure(code, message, extra = {}) {
+  return {
+    ok: false,
+    reason: code,
+    message,
+    ...extra
+  }
+}
+
+function mapConnectivityError(error) {
+  const message = String(error?.message || '').trim()
+  const backendReason = String(error?.details?.reason || error?.details?.details?.reason || '').trim()
+  if (!message) return { state: 'provider_error', reason: 'provider_error', message: 'Unable to complete request.' }
+
+  if (error instanceof ConnectivityApiError) {
+    if (backendReason === 'connect_provider_required') {
+      return {
+        state: 'authenticated_unconnected',
+        reason: 'connect_provider_required',
+        message: 'Google Calendar is not connected.'
+      }
+    }
+    if (backendReason === 'execution_failed') {
+      return { state: 'provider_error', reason: 'execution_failed', message: 'Calendar execution failed.' }
+    }
+    if (error.code === 'AUTH_REQUIRED' || error.status === 401) {
+      return { state: 'unauthenticated', reason: 'login_required', message: 'Sign in required.' }
+    }
+    if (error.status === 409) {
+      return { state: 'provider_error', reason: 'execution_failed', message: 'Action is no longer approvable.' }
+    }
+    if (error.status === 502) {
+      return { state: 'provider_error', reason: 'execution_failed', message: 'Calendar execution failed.' }
+    }
+    if (error.status === 0 || message.includes('Failed to fetch')) {
+      return { state: 'backend_unavailable', reason: 'backend_unavailable', message: 'Backend unavailable.' }
+    }
+    if (error.status >= 500 || message.includes('Google Calendar integration is not configured')) {
+      return { state: 'misconfigured', reason: 'misconfigured', message: 'Calendar backend misconfigured.' }
+    }
+  }
+
+  if (message.includes('Provider is not connected')) {
+    return {
+      state: 'authenticated_unconnected',
+      reason: 'connect_provider_required',
+      message: 'Google Calendar is not connected.'
+    }
+  }
+
+  return { state: 'provider_error', reason: 'provider_error', message }
+}
+
+function deriveAuthConnectivityState({ loading, auth, connectivityStatus, lastError }) {
+  if (loading) {
+    return {
+      state: 'connection_pending',
+      reason: 'loading',
+      message: 'Checking account and provider status...'
+    }
+  }
+
+  if (lastError) {
+    if (lastError.state === 'backend_unavailable') return lastError
+    if (lastError.state === 'misconfigured') return lastError
+  }
+
+  if (!auth?.authenticated) {
+    return {
+      state: 'unauthenticated',
+      reason: 'auth_missing',
+      message: 'Sign in to connect calendar.'
+    }
+  }
+
+  const google = connectivityStatus?.googleCalendar
+  if (google?.status === 'syncing') {
+    return {
+      state: 'connection_pending',
+      reason: 'provider_syncing',
+      message: 'Google Calendar connection is pending.'
+    }
+  }
+
+  if (google?.errorMessage) {
+    return {
+      state: 'provider_error',
+      reason: 'provider_error',
+      message: String(google.errorMessage)
+    }
+  }
+
+  if (!google?.connected) {
+    return {
+      state: 'authenticated_unconnected',
+      reason: 'google_not_connected',
+      message: 'Connect Google Calendar to enable external actions.'
+    }
+  }
+
+  return {
+    state: 'connected_ready',
+    reason: 'ready',
+    message: 'Calendar actions are ready.'
+  }
+}
+
 export function DashboardProvider({ children }) {
   const apiKeyRef = useRef('')
 
@@ -216,6 +383,23 @@ export function DashboardProvider({ children }) {
   const [connectivityStatus, setConnectivityStatus] = useState(
     normalizeConnectivity(hydrated.connectivityStatus)
   )
+  const [authState, setAuthState] = useState({
+    authenticated: false,
+    user: null,
+    loginUrl: '/api/auth/login',
+    logoutUrl: '/api/auth/logout'
+  })
+  const [authConnectivityLoading, setAuthConnectivityLoading] = useState(true)
+  const [authConnectivityRefreshing, setAuthConnectivityRefreshing] = useState(false)
+  const [authConnectivityError, setAuthConnectivityError] = useState(null)
+  const [donnaActions, setDonnaActions] = useState([])
+  const [donnaActionsLoading, setDonnaActionsLoading] = useState(false)
+  const [donnaActionsError, setDonnaActionsError] = useState(null)
+  const [donnaActionExecution, setDonnaActionExecution] = useState({
+    inFlight: false,
+    actionId: '',
+    lastResult: null
+  })
   const [calendarEvents, setCalendarEvents] = useState(() =>
     (hydrated.calendarEvents || DEFAULT_CALENDAR_EVENTS).map((item, index) =>
       normalizeCalendarEvent(item, index)
@@ -237,11 +421,44 @@ export function DashboardProvider({ children }) {
     inactivity: '',
     completionStreak: ''
   })
+  const proposalInFlightRef = useRef(new Set())
+
+  const clearExternalRuntimeState = useCallback(() => {
+    setConnectivityStatus(normalizeConnectivity(DEFAULT_CONNECTIVITY_STATUS))
+    setDonnaActions([])
+    setDonnaActionsLoading(false)
+    setDonnaActionsError(null)
+    setDonnaActionExecution({ inFlight: false, actionId: '', lastResult: null })
+  }, [])
 
   const unreadInsightCount = useMemo(
     () => insightDesk.filter((item) => !item.read).length,
     [insightDesk]
   )
+
+  const authConnectivity = useMemo(() => {
+    const summary = deriveAuthConnectivityState({
+      loading: authConnectivityLoading,
+      auth: authState,
+      connectivityStatus,
+      lastError: authConnectivityError
+    })
+
+    return {
+      ...summary,
+      loading: authConnectivityLoading,
+      refreshing: authConnectivityRefreshing,
+      auth: authState,
+      providers: connectivityStatus,
+      error: authConnectivityError
+    }
+  }, [
+    authConnectivityError,
+    authConnectivityLoading,
+    authConnectivityRefreshing,
+    authState,
+    connectivityStatus
+  ])
 
   useEffect(() => {
     apiKeyRef.current = apiKey
@@ -330,23 +547,125 @@ export function DashboardProvider({ children }) {
     return () => window.clearInterval(interval)
   }, [])
 
+  const refreshAuthConnectivity = useCallback(async ({ silent = false } = {}) => {
+    setAuthConnectivityRefreshing(true)
+    if (!silent) setAuthConnectivityLoading(true)
+
+    try {
+      const authData = await getAuthMe()
+      const authSnapshot = {
+        authenticated: Boolean(authData?.authenticated),
+        user: authData?.user || null,
+        loginUrl: String(authData?.loginUrl || '/api/auth/login'),
+        logoutUrl: String(authData?.logoutUrl || '/api/auth/logout')
+      }
+
+      setAuthState(authSnapshot)
+
+      let providerData = null
+      if (authSnapshot.authenticated) {
+        providerData = await fetchProviders()
+        if (providerData && typeof providerData.providers === 'object') {
+          setConnectivityStatus((prev) =>
+            normalizeConnectivity({
+              ...prev,
+              ...providerData.providers
+            })
+          )
+        }
+      } else {
+        clearExternalRuntimeState()
+      }
+
+      setAuthConnectivityError(null)
+      return {
+        ok: true,
+        state: deriveAuthConnectivityState({
+          loading: false,
+          auth: authSnapshot,
+          connectivityStatus: providerData?.providers || DEFAULT_CONNECTIVITY_STATUS,
+          lastError: null
+        }).state
+      }
+    } catch (error) {
+      const mapped = mapConnectivityError(error)
+      setAuthConnectivityError(mapped)
+      if (mapped.state === 'unauthenticated') {
+        clearExternalRuntimeState()
+      }
+      return {
+        ok: false,
+        state: mapped.state,
+        reason: mapped.reason,
+        message: mapped.message,
+        loginUrl: error instanceof ConnectivityApiError ? error.loginUrl || null : null
+      }
+    } finally {
+      setAuthConnectivityLoading(false)
+      setAuthConnectivityRefreshing(false)
+    }
+  }, [clearExternalRuntimeState])
+
   useEffect(() => {
     let cancelled = false
-    fetchProviders()
-      .then((data) => {
-        if (cancelled) return
-        if (data && typeof data.providers === 'object') {
-          setConnectivityStatus((prev) => normalizeConnectivity({ ...prev, ...data.providers }))
-        }
-      })
-      .catch(() => {
-        // Backend may not be running in local-only mode.
-      })
+    refreshAuthConnectivity({ silent: true }).then((result) => {
+      if (cancelled) return
+      if (!result?.ok && result?.state === 'backend_unavailable') {
+        // Keep local state functioning while backend is offline.
+      }
+    })
 
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [refreshAuthConnectivity])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const query = new URLSearchParams(window.location.search)
+    const provider = query.get('provider')
+    const status = query.get('status')
+    const reason = query.get('reason')
+    const message = query.get('message')
+    const auth = query.get('auth')
+
+    if (provider && status) {
+      if (status === 'connected') {
+        pushInsight('donna', 'Provider connected', 'Google Calendar connected successfully.', 'success')
+        setChatOpen(true)
+      } else if (status === 'failed') {
+        pushInsight(
+          'donna',
+          'Provider connection failed',
+          reason ? String(reason) : 'Connection failed. Try again from Settings.',
+          'warning'
+        )
+      } else if (status === 'pending') {
+        pushInsight('donna', 'Provider pending', 'Provider connection is pending verification.', 'info')
+      }
+
+      refreshAuthConnectivity({ silent: true })
+
+      query.delete('provider')
+      query.delete('status')
+      query.delete('reason')
+      const next = query.toString()
+      const nextUrl = `${window.location.pathname}${next ? `?${next}` : ''}`
+      window.history.replaceState({}, '', nextUrl)
+      return
+    }
+
+    if (auth === 'failed') {
+      const detail = message || reason || 'Sign in failed.'
+      pushInsight('donna', 'Authentication failed', String(detail), 'warning')
+      query.delete('auth')
+      query.delete('reason')
+      query.delete('message')
+      const next = query.toString()
+      const nextUrl = `${window.location.pathname}${next ? `?${next}` : ''}`
+      window.history.replaceState({}, '', nextUrl)
+    }
+  }, [refreshAuthConnectivity])
 
   const pushInsight = (source, title, detail, severity = 'info') => {
     const next = {
@@ -677,6 +996,58 @@ export function DashboardProvider({ children }) {
     setInsightDesk((prev) => prev.map((item) => ({ ...item, read: true })))
   }
 
+  const getDonnaExternalReadiness = () => {
+    const state = deriveAuthConnectivityState({
+      loading: authConnectivityLoading,
+      auth: authState,
+      connectivityStatus,
+      lastError: authConnectivityError
+    })
+
+    if (state.state === 'connected_ready') {
+      return { ok: true, ...state }
+    }
+
+    if (state.state === 'unauthenticated') {
+      return {
+        ok: false,
+        code: 'login_required',
+        ...state,
+        loginUrl: authState.loginUrl || '/api/auth/login'
+      }
+    }
+
+    if (state.state === 'authenticated_unconnected' || state.state === 'connection_pending') {
+      return {
+        ok: false,
+        code: 'connect_provider_required',
+        ...state
+      }
+    }
+
+    if (state.state === 'misconfigured') {
+      return {
+        ok: false,
+        code: 'misconfigured',
+        ...state
+      }
+    }
+
+    if (state.state === 'backend_unavailable') {
+      return {
+        ok: false,
+        code: 'backend_unavailable',
+        ...state
+      }
+    }
+
+    return {
+      ok: false,
+      code: 'provider_error',
+      ...state
+    }
+  }
+
   const connectProvider = async (provider, payload = {}) => {
     const key = provider === 'google_calendar' ? 'googleCalendar' : provider
     setConnectivityStatus((prev) => ({
@@ -686,12 +1057,27 @@ export function DashboardProvider({ children }) {
 
     try {
       const response = await connectProviderApi(provider, payload)
+      if (response?.redirectUrl) {
+        window.location.assign(response.redirectUrl)
+        return true
+      }
       if (response?.provider) {
         setConnectivityStatus((prev) => ({ ...prev, [key]: { ...prev[key], ...response.provider } }))
       }
+      await refreshAuthConnectivity({ silent: true })
       pushInsight('donna', 'Provider connected', `${key} is now connected.`, 'success')
       return true
-    } catch {
+    } catch (error) {
+      if (error instanceof ConnectivityApiError && error.loginUrl) {
+        window.location.assign(
+          error.loginUrl.startsWith('http')
+            ? error.loginUrl
+            : `${window.location.origin}${error.loginUrl}`
+        )
+        return false
+      }
+      const mapped = mapConnectivityError(error)
+      setAuthConnectivityError(mapped)
       if (key === 'blackboard' && !String(payload?.institutionDomain || '').trim()) {
         setConnectivityStatus((prev) => ({
           ...prev,
@@ -699,21 +1085,15 @@ export function DashboardProvider({ children }) {
         }))
         return false
       }
-
-      const now = new Date().toISOString()
       setConnectivityStatus((prev) => ({
         ...prev,
         [key]: {
           ...prev[key],
-          connected: true,
-          lastSyncAt: now,
-          status: 'idle',
-          errorMessage: '',
-          institutionDomain: payload?.institutionDomain || prev[key].institutionDomain || ''
+          status: 'error',
+          errorMessage: mapped.message
         }
       }))
-      pushInsight('donna', 'Local connector mode', `${key} connected in local mode (API unavailable).`, 'warning')
-      return true
+      return false
     }
   }
 
@@ -735,26 +1115,34 @@ export function DashboardProvider({ children }) {
           }
         }))
       }
+      await refreshAuthConnectivity({ silent: true })
       pushInsight('donna', 'Provider disconnected', `${key} is now disconnected.`, 'info')
       return true
-    } catch {
+    } catch (error) {
+      if (error instanceof ConnectivityApiError && error.loginUrl) {
+        window.location.assign(
+          error.loginUrl.startsWith('http')
+            ? error.loginUrl
+            : `${window.location.origin}${error.loginUrl}`
+        )
+        return false
+      }
+      const mapped = mapConnectivityError(error)
+      setAuthConnectivityError(mapped)
       setConnectivityStatus((prev) => ({
         ...prev,
         [key]: {
           ...prev[key],
-          connected: false,
-          status: 'idle',
-          errorMessage: '',
-          lastSyncAt: null
+          status: 'error',
+          errorMessage: mapped.message
         }
       }))
-      return true
+      return false
     }
   }
 
   const syncProvider = async (provider) => {
     const key = provider === 'google_calendar' ? 'googleCalendar' : provider
-    const wasConnected = Boolean(connectivityStatus?.[key]?.connected)
     setConnectivityStatus((prev) => ({
       ...prev,
       [key]: { ...prev[key], status: 'syncing', errorMessage: '' }
@@ -765,23 +1153,28 @@ export function DashboardProvider({ children }) {
       if (response?.provider) {
         setConnectivityStatus((prev) => ({ ...prev, [key]: { ...prev[key], ...response.provider } }))
       }
+      await refreshAuthConnectivity({ silent: true })
       pushInsight('donna', 'Sync complete', `${key} sync finished successfully.`, 'success')
       return true
     } catch (error) {
-      const now = new Date().toISOString()
+      if (error instanceof ConnectivityApiError && error.loginUrl) {
+        window.location.assign(
+          error.loginUrl.startsWith('http')
+            ? error.loginUrl
+            : `${window.location.origin}${error.loginUrl}`
+        )
+        return false
+      }
+      const mapped = mapConnectivityError(error)
+      setAuthConnectivityError(mapped)
       setConnectivityStatus((prev) => ({
         ...prev,
         [key]: {
           ...prev[key],
-          status: 'idle',
-          lastSyncAt: prev[key].connected ? now : prev[key].lastSyncAt,
-          errorMessage: prev[key].connected ? '' : String(error?.message || 'Connect provider first.')
+          status: 'error',
+          errorMessage: mapped.message
         }
       }))
-      if (wasConnected) {
-        pushInsight('donna', 'Local sync complete', `${key} sync completed in local mode.`, 'warning')
-        return true
-      }
       return false
     }
   }
@@ -839,6 +1232,7 @@ export function DashboardProvider({ children }) {
   }
 
   const askDonnaSchedule = async ({ title, context = '', targetLabel = '' }) => {
+    const readiness = getDonnaExternalReadiness()
     const safeTitle = String(title || 'this task').trim()
     const safeContext = String(context || '').trim()
     const safeTarget = String(targetLabel || '').trim()
@@ -846,14 +1240,418 @@ export function DashboardProvider({ children }) {
       `Schedule ${safeTitle} into today's plan.`,
       safeContext ? `Context: ${safeContext}.` : '',
       safeTarget ? `Target: ${safeTarget}.` : '',
-      'Suggest exact time blocks and optimize around existing commitments.'
+      readiness.ok
+        ? 'Suggest exact time blocks and optimize around existing commitments.'
+        : 'Suggest local plan blocks only (calendar execution unavailable right now).'
     ]
       .filter(Boolean)
       .join(' ')
 
+    if (!readiness.ok && readiness.state !== 'connection_pending') {
+      pushInsight('donna', 'External calendar unavailable', readiness.message, 'warning')
+    }
+
     setChatOpen(true)
     await runPlanner(prompt, 'optimize')
+
+    if (!readiness.ok) {
+      return readiness
+    }
+
+    try {
+      const contextResult = await getCalendarContextWithGuard()
+      let start = null
+      let end = null
+
+      if (contextResult?.ok && Array.isArray(contextResult?.context?.freeWindows)) {
+        const candidate = contextResult.context.freeWindows.find((window) => Number(window.minutes || 0) >= 45)
+        if (candidate?.start && candidate?.end) {
+          start = candidate.start
+          const computedEnd = addMinutes(start, Math.min(90, Math.max(45, Number(candidate.minutes || 60))))
+          end = computedEnd && new Date(computedEnd).getTime() < new Date(candidate.end).getTime() ? computedEnd : candidate.end
+        }
+      }
+
+      if (!start || !end) {
+        const fallbackStart = new Date()
+        fallbackStart.setHours(20, 0, 0, 0)
+        if (fallbackStart.getTime() <= Date.now()) fallbackStart.setDate(fallbackStart.getDate() + 1)
+        start = fallbackStart.toISOString()
+        end = addMinutes(start, 60)
+      }
+
+      const proposal = await proposeStudyBlockAction({
+        title: `Study Block: ${safeTitle}`,
+        start,
+        end,
+        description: `Donna suggestion from planning flow.${safeContext ? ` Context: ${safeContext}` : ''}`,
+        metadata: {
+          trigger: 'ask_donna_schedule',
+          targetLabel: safeTarget
+        }
+      })
+
+      if (proposal?.ok) {
+        pushInsight('donna', 'Study block proposed', `${safeTitle} is ready for approval in Donna chat.`, 'info')
+      }
+    } catch {
+      // Keep local planning flow resilient even if proposal creation fails.
+    }
+
+    return readiness
   }
+
+  const getCalendarContextWithGuard = async () => {
+    const readiness = getDonnaExternalReadiness()
+    if (!readiness.ok) {
+      return {
+        ok: false,
+        ...readiness,
+        events: [],
+        context: null
+      }
+    }
+
+    try {
+      const response = await getDonnaCalendarContext()
+      await refreshAuthConnectivity({ silent: true })
+      return {
+        ok: true,
+        state: 'connected_ready',
+        events: response?.events || [],
+        context: response?.context || null
+      }
+    } catch (error) {
+      const mapped = mapConnectivityError(error)
+      setAuthConnectivityError(mapped)
+      return {
+        ok: false,
+        ...mapped,
+        events: [],
+        context: null
+      }
+    }
+  }
+
+  const fetchDonnaActions = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setDonnaActionsLoading(true)
+    setDonnaActionsError(null)
+
+    try {
+      const response = await listDonnaActions()
+      const normalized = Array.isArray(response?.actions)
+        ? response.actions.map((item, index) => normalizeDonnaAction(item, index))
+        : []
+      setDonnaActions(normalized)
+      return {
+        ok: true,
+        actions: normalized
+      }
+    } catch (error) {
+      const mapped = mapConnectivityError(error)
+      setAuthConnectivityError(mapped)
+      setDonnaActionsError(mapped)
+      return {
+        ok: false,
+        ...mapped,
+        actions: []
+      }
+    } finally {
+      setDonnaActionsLoading(false)
+    }
+  }, [])
+
+  const normalizeStudyBlockProposal = (payload = {}) => {
+    const title = String(payload?.title || 'Study Block').trim() || 'Study Block'
+    const startIso = toIsoOrNull(payload?.start) || toIsoOrNull(payload?.startAt) || addMinutes(new Date().toISOString(), 60)
+    const endIso =
+      toIsoOrNull(payload?.end) ||
+      toIsoOrNull(payload?.endAt) ||
+      addMinutes(startIso, Math.max(15, Number(payload?.durationMinutes || 60)))
+
+    return {
+      title,
+      start: startIso,
+      end: endIso,
+      description:
+        String(payload?.description || '').trim() ||
+        `Donna scheduled this focus block for ${title}.`,
+      source: String(payload?.source || 'donna').trim() || 'donna',
+      metadata: {
+        createdBy: 'donna',
+        intent: String(payload?.metadata?.intent || 'study_block'),
+        ...((payload?.metadata && typeof payload.metadata === 'object') ? payload.metadata : {})
+      }
+    }
+  }
+
+  const studyBlockProposalHash = (payload = {}) =>
+    `${String(payload.title || '').trim().toLowerCase()}|${String(payload.start || '')}|${String(
+      payload.end || ''
+    )}`
+
+  const proposeStudyBlockAction = async (payload = {}) => {
+    if (donnaActionExecution.inFlight) {
+      return toCanonicalFailure('provider_error', 'Another study block action is in progress.', {
+        state: 'connection_pending',
+        action: null
+      })
+    }
+
+    const readiness = getDonnaExternalReadiness()
+    if (!readiness.ok) {
+      if (readiness.code === 'login_required') {
+        return toCanonicalFailure('login_required', readiness.message, { state: readiness.state, action: null })
+      }
+      if (readiness.code === 'connect_provider_required') {
+        return toCanonicalFailure('connect_provider_required', readiness.message, {
+          state: readiness.state,
+          action: null
+        })
+      }
+      if (readiness.code === 'misconfigured') {
+        return toCanonicalFailure('misconfigured', readiness.message, { state: readiness.state, action: null })
+      }
+      if (readiness.code === 'backend_unavailable') {
+        return toCanonicalFailure('backend_unavailable', readiness.message, {
+          state: readiness.state,
+          action: null
+        })
+      }
+      return toCanonicalFailure('provider_error', readiness.message, { state: readiness.state, action: null })
+    }
+
+    const proposalPayload = normalizeStudyBlockProposal(payload)
+    const payloadHash = studyBlockProposalHash(proposalPayload)
+    if (proposalInFlightRef.current.has(payloadHash)) {
+      return toCanonicalFailure('provider_error', 'A matching proposal is already being created.', {
+        state: 'connection_pending',
+        action: null
+      })
+    }
+    const duplicateExisting = donnaActions.find((item) => {
+      if (item.status !== 'proposed') return false
+      return (
+        String(item.payload?.title || '').trim().toLowerCase() ===
+          String(proposalPayload.title || '').trim().toLowerCase() &&
+        String(item.payload?.start || '') === String(proposalPayload.start || '')
+      )
+    })
+    if (duplicateExisting) {
+      return {
+        ok: true,
+        state: 'connected_ready',
+        action: duplicateExisting
+      }
+    }
+
+    if (!proposalPayload.start || !proposalPayload.end) {
+      return toCanonicalFailure('execution_failed', 'Invalid date range for study block.', {
+        state: 'provider_error',
+        action: null
+      })
+    }
+
+    try {
+      proposalInFlightRef.current.add(payloadHash)
+      const proposed = await proposeStudyBlock(proposalPayload)
+      if (!proposed?.action?.id) {
+        return toCanonicalFailure('provider_error', 'Could not create study block proposal.', {
+          state: 'provider_error',
+          action: null
+        })
+      }
+
+      const normalized = normalizeDonnaAction(proposed.action, 0)
+      setDonnaActions((prev) => [normalized, ...prev.filter((item) => item.id !== normalized.id)])
+      setDonnaActionsError(null)
+      pushInsight('donna', 'Study block proposed', `${normalized.payload.title} is waiting for approval.`, 'info')
+      return {
+        ok: true,
+        state: 'connected_ready',
+        action: normalized
+      }
+    } catch (error) {
+      const mapped = mapConnectivityError(error)
+      setAuthConnectivityError(mapped)
+      setDonnaActionsError(mapped)
+      if (mapped.reason === 'login_required') {
+        return toCanonicalFailure('login_required', mapped.message, { state: mapped.state, action: null })
+      }
+      if (mapped.reason === 'connect_provider_required') {
+        return toCanonicalFailure('connect_provider_required', mapped.message, {
+          state: mapped.state,
+          action: null
+        })
+      }
+      if (mapped.reason === 'misconfigured') {
+        return toCanonicalFailure('misconfigured', mapped.message, { state: mapped.state, action: null })
+      }
+      if (mapped.reason === 'backend_unavailable') {
+        return toCanonicalFailure('backend_unavailable', mapped.message, { state: mapped.state, action: null })
+      }
+      return toCanonicalFailure('provider_error', mapped.message, { state: mapped.state, action: null })
+    } finally {
+      proposalInFlightRef.current.delete(payloadHash)
+      await fetchDonnaActions({ silent: true })
+    }
+  }
+
+  const approveStudyBlockAction = async (actionId) => {
+    const readiness = getDonnaExternalReadiness()
+    if (!readiness.ok) {
+      if (readiness.code === 'login_required') {
+        return toCanonicalFailure('login_required', readiness.message, { state: readiness.state, action: null })
+      }
+      if (readiness.code === 'connect_provider_required') {
+        return toCanonicalFailure('connect_provider_required', readiness.message, {
+          state: readiness.state,
+          action: null
+        })
+      }
+      if (readiness.code === 'misconfigured') {
+        return toCanonicalFailure('misconfigured', readiness.message, { state: readiness.state, action: null })
+      }
+      if (readiness.code === 'backend_unavailable') {
+        return toCanonicalFailure('backend_unavailable', readiness.message, {
+          state: readiness.state,
+          action: null
+        })
+      }
+      return toCanonicalFailure('provider_error', readiness.message, { state: readiness.state, action: null })
+    }
+
+    const targetId = String(actionId || '').trim()
+    if (!targetId) {
+      return toCanonicalFailure('execution_failed', 'Missing action id.', { state: 'provider_error', action: null })
+    }
+
+    if (donnaActionExecution.inFlight && donnaActionExecution.actionId === targetId) {
+      return toCanonicalFailure('provider_error', 'Action execution already in progress.', {
+        state: 'connection_pending',
+        action: null
+      })
+    }
+
+    setDonnaActionExecution({
+      inFlight: true,
+      actionId: targetId,
+      lastResult: null
+    })
+
+    try {
+      const approved = await approveDonnaAction(targetId)
+      const normalized = normalizeDonnaAction(approved?.action || { id: targetId }, 0)
+      setDonnaActions((prev) => [normalized, ...prev.filter((item) => item.id !== normalized.id)])
+      await fetchDonnaActions({ silent: true })
+      await refreshAuthConnectivity({ silent: true })
+      pushInsight(
+        'donna',
+        normalized.status === 'executed' ? 'Study block created' : 'Study block updated',
+        normalized.status === 'executed'
+          ? `${normalized.payload.title} was added to Google Calendar.`
+          : `${normalized.payload.title} action status is ${normalized.status}.`,
+        normalized.status === 'executed' ? 'success' : 'info'
+      )
+      setDonnaActionExecution({
+        inFlight: false,
+        actionId: '',
+        lastResult: { ok: true, actionId: targetId, status: normalized.status }
+      })
+      return {
+        ok: true,
+        state: normalized.status === 'executed' ? 'connected_ready' : 'provider_error',
+        action: normalized
+      }
+    } catch (error) {
+      const mapped = mapConnectivityError(error)
+      const failure =
+        mapped.reason === 'execution_failed'
+          ? mapped
+          : { ...mapped, reason: 'execution_failed', message: mapped.message || 'Calendar execution failed.' }
+      setAuthConnectivityError(failure)
+      setDonnaActionsError(failure)
+      await fetchDonnaActions({ silent: true })
+      setDonnaActionExecution({
+        inFlight: false,
+        actionId: '',
+        lastResult: { ok: false, actionId: targetId, reason: failure.reason }
+      })
+      pushInsight('donna', 'Study block failed', failure.message, 'warning')
+      if (failure.reason === 'login_required') {
+        return toCanonicalFailure('login_required', failure.message, { state: failure.state, action: null })
+      }
+      if (failure.reason === 'connect_provider_required') {
+        return toCanonicalFailure('connect_provider_required', failure.message, {
+          state: failure.state,
+          action: null
+        })
+      }
+      if (failure.reason === 'misconfigured') {
+        return toCanonicalFailure('misconfigured', failure.message, { state: failure.state, action: null })
+      }
+      if (failure.reason === 'backend_unavailable') {
+        return toCanonicalFailure('backend_unavailable', failure.message, {
+          state: failure.state,
+          action: null
+        })
+      }
+      if (failure.reason === 'execution_failed') {
+        return toCanonicalFailure('execution_failed', failure.message, { state: failure.state, action: null })
+      }
+      return toCanonicalFailure('provider_error', failure.message, { state: failure.state, action: null })
+    } finally {
+      await fetchDonnaActions({ silent: true })
+    }
+  }
+
+  const createStudyBlockWithApproval = async (payload) => {
+    if (donnaActionExecution.inFlight) {
+      return {
+        ok: false,
+        state: 'connection_pending',
+        reason: 'execution_in_flight',
+        message: 'Action execution already in progress.',
+        action: null
+      }
+    }
+    const proposed = await proposeStudyBlockAction(payload)
+    if (!proposed?.ok || !proposed?.action?.id) {
+      return proposed
+    }
+
+    return approveStudyBlockAction(proposed.action.id)
+  }
+
+  const listDonnaActionsWithGuard = async () => {
+    const readiness = getDonnaExternalReadiness()
+    if (!readiness.ok && readiness.state === 'unauthenticated') {
+      return { ok: false, ...readiness, actions: [] }
+    }
+
+    const response = await fetchDonnaActions()
+    if (!response.ok) {
+      return {
+        ok: false,
+        ...response,
+        actions: []
+      }
+    }
+
+    return {
+      ok: true,
+      state: readiness.ok ? readiness.state : 'authenticated_unconnected',
+      actions: response.actions
+    }
+  }
+
+  useEffect(() => {
+    if (!authState.authenticated) {
+      clearExternalRuntimeState()
+      return
+    }
+    fetchDonnaActions({ silent: true })
+  }, [authState.authenticated, clearExternalRuntimeState, fetchDonnaActions])
 
   const createCalendarEvent = (payload) => {
     const title = String(payload?.title || '').trim()
@@ -945,6 +1743,11 @@ export function DashboardProvider({ children }) {
     setSettings(DEFAULT_SETTINGS_STATE)
     setInsightDesk(DEFAULT_INSIGHT_DESK)
     setConnectivityStatus(DEFAULT_CONNECTIVITY_STATUS)
+    setAuthConnectivityError(null)
+    setDonnaActions([])
+    setDonnaActionsLoading(false)
+    setDonnaActionsError(null)
+    setDonnaActionExecution({ inFlight: false, actionId: '', lastResult: null })
     setCalendarEvents(DEFAULT_CALENDAR_EVENTS)
     setAssignments(DEFAULT_ASSIGNMENTS)
     setExams(DEFAULT_EXAMS)
@@ -954,6 +1757,28 @@ export function DashboardProvider({ children }) {
 
   const setApiKeySession = (value) => {
     setApiKey(String(value || '').trim())
+  }
+
+  const startLogin = (returnTo = window.location.href) => {
+    const base = authState.loginUrl || '/api/auth/login'
+    const absolute = base.startsWith('http') ? base : `${window.location.origin}${base}`
+    const target = new URL(absolute)
+    target.searchParams.set('returnTo', returnTo)
+    window.location.assign(target.toString())
+  }
+
+  const logoutSession = async (returnTo = window.location.href) => {
+    try {
+      const response = await logoutAuth({ returnTo })
+      await refreshAuthConnectivity({ silent: true })
+      if (response?.logoutUrl) {
+        window.location.assign(response.logoutUrl)
+        return true
+      }
+      return true
+    } catch {
+      return false
+    }
   }
 
   const contextValue = {
@@ -978,6 +1803,11 @@ export function DashboardProvider({ children }) {
     resetLocalData,
     setApiKeySession,
     clearApiKey: () => setApiKey(''),
+    authState,
+    authConnectivity,
+    refreshAuthConnectivity,
+    startLogin,
+    logoutSession,
     setProfile,
     aspirations,
     aspirationsArchive,
@@ -989,6 +1819,16 @@ export function DashboardProvider({ children }) {
     restoreAspiration,
     deleteAspiration,
     askDonnaSchedule,
+    getCalendarContextWithGuard,
+    proposeStudyBlockAction,
+    approveStudyBlockAction,
+    createStudyBlockWithApproval,
+    fetchDonnaActions,
+    listDonnaActionsWithGuard,
+    donnaActions,
+    donnaActionsLoading,
+    donnaActionsError,
+    donnaActionExecution,
     calendarEvents,
     createCalendarEvent,
     updateCalendarEvent,

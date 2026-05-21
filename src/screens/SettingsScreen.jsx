@@ -56,6 +56,8 @@ function SettingsScreen() {
     connectProvider,
     disconnectProvider,
     syncProvider,
+    authConnectivity,
+    refreshAuthConnectivity,
     unreadInsightCount,
     markAllInsightsRead
   } = useDashboard()
@@ -64,6 +66,12 @@ function SettingsScreen() {
   const [draftSettings, setDraftSettings] = useState(settings)
   const [blackboardDomain, setBlackboardDomain] = useState(connectivityStatus.blackboard?.institutionDomain || '')
   const [statusMessage, setStatusMessage] = useState('')
+  const normalizeProviderLabel = (provider) => {
+    if (provider === 'google_calendar') return 'Google Calendar'
+    if (provider === 'blackboard') return 'Blackboard'
+    if (provider === 'canvas') return 'Canvas'
+    return provider
+  }
 
   useEffect(() => {
     setDraftProfile({ name: profile.name, email: profile.email })
@@ -72,6 +80,40 @@ function SettingsScreen() {
   useEffect(() => {
     setDraftSettings(settings)
   }, [settings])
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search)
+    const provider = query.get('provider')
+    const status = query.get('status')
+    const reason = query.get('reason')
+
+    if (provider && status) {
+      const label = normalizeProviderLabel(provider)
+      if (status === 'connected') {
+        setStatusMessage(`${label} connected successfully.`)
+        refreshAuthConnectivity({ silent: true })
+      } else if (status === 'failed') {
+        setStatusMessage(`${label} connection failed${reason ? `: ${reason}` : '.'}`)
+        refreshAuthConnectivity({ silent: true })
+      } else if (status === 'pending') {
+        setStatusMessage(`${label} connection is pending verification.`)
+        refreshAuthConnectivity({ silent: true })
+      }
+
+      query.delete('provider')
+      query.delete('status')
+      query.delete('reason')
+      const nextSearch = query.toString()
+      const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}`
+      window.history.replaceState({}, '', nextUrl)
+    }
+  }, [refreshAuthConnectivity])
+
+  useEffect(() => {
+    if (!statusMessage && authConnectivity?.message) {
+      setStatusMessage(authConnectivity.message)
+    }
+  }, [authConnectivity, statusMessage])
 
   const connectivity = useMemo(
     () => ({
@@ -107,17 +149,20 @@ function SettingsScreen() {
           }
         : {}
     const ok = await connectProvider(provider, payload)
-    setStatusMessage(ok ? `${provider} connected.` : `${provider} connection failed.`)
+    const label = normalizeProviderLabel(provider)
+    setStatusMessage(ok ? `${label} connected.` : `${label} connection failed.`)
   }
 
   const disconnectHandler = async (provider) => {
-    await disconnectProvider(provider)
-    setStatusMessage(`${provider} disconnected.`)
+    const ok = await disconnectProvider(provider)
+    const label = normalizeProviderLabel(provider)
+    setStatusMessage(ok ? `${label} disconnected.` : `${label} disconnect failed.`)
   }
 
   const syncHandler = async (provider) => {
     const ok = await syncProvider(provider)
-    setStatusMessage(ok ? `${provider} synced.` : `${provider} sync failed.`)
+    const label = normalizeProviderLabel(provider)
+    setStatusMessage(ok ? `${label} synced.` : `${label} sync failed.`)
   }
 
   return (
@@ -469,7 +514,20 @@ function SettingsScreen() {
           </div>
 
           <div className="mt-12 flex items-center justify-between">
-            <p className="text-xs text-on-surface-variant">{statusMessage}</p>
+            <p className="text-xs text-on-surface-variant">
+              {statusMessage ||
+                (authConnectivity.loading
+                  ? 'Checking secure account session...'
+                  : authConnectivity.auth?.authenticated
+                  ? `Signed in${
+                      authConnectivity.auth?.user?.name
+                        ? ` as ${authConnectivity.auth.user.name}`
+                        : authConnectivity.auth?.user?.email
+                        ? ` as ${authConnectivity.auth.user.email}`
+                        : ''
+                    }.`
+                  : 'Not signed in.')}
+            </p>
             <div className="flex justify-end gap-4">
               <button
                 className="px-8 py-2.5 rounded-full text-sm font-medium text-on-surface-variant hover:bg-surface-container transition-colors"

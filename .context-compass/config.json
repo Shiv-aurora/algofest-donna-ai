@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "createdAt": 1775505950074,
+  "updatedAt": 1775505950857,
+  "indexedLanguages": [
+    "typescript",
+    "javascript"
+  ],
+  "thresholds": {
+    "maxCommits": 1000,
+    "maxSessionFunctions": 15,
+    "topKNeighbors": 10
+  },
+  "hooks": {
+    "registerInLocalSettings": true
+  },
+  "retrieval": {
+    "mode": "balanced"
+  }
+}
