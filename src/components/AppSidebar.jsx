@@ -19,11 +19,12 @@ function AppSidebar() {
   const location = useLocation()
   const {
     profile,
+    userMode,
     accountMenuOpen,
     setAccountMenuOpen,
     setApiKeyEditorOpen,
     setChatOpen,
-    resetLocalData
+    logoutSession
   } = useDashboard()
 
   const activeKey = routeKey(location.pathname)
@@ -31,9 +32,6 @@ function AppSidebar() {
   return (
     <aside className="hidden md:flex flex-col h-full w-64 bg-slate-100/30 border-r border-slate-200/10 p-6 space-y-2">
       <div className="flex items-center gap-3 mb-10 px-3">
-        <div className="w-8 h-8 bg-gradient-to-br from-primary to-primary-container rounded-lg flex items-center justify-center">
-          <span className="material-symbols-outlined text-on-primary text-sm">auto_awesome</span>
-        </div>
         <div>
           <h1 className="font-headline font-light text-slate-900 tracking-widest text-lg">Donna</h1>
         </div>
@@ -71,7 +69,9 @@ function AppSidebar() {
           />
           <div className="text-left">
             <p className="text-sm font-medium text-on-surface">{profile.name}</p>
-            <p className="text-[10px] uppercase tracking-widest text-on-surface-variant">Student Workspace</p>
+            <p className="text-[10px] uppercase tracking-widest text-on-surface-variant">
+              {userMode === 'demo' ? 'Demo Session' : userMode === 'guest' ? 'Guest Session' : 'Google Session'}
+            </p>
           </div>
           <span className="material-symbols-outlined ml-auto text-on-surface-variant text-[18px]">expand_more</span>
         </button>
@@ -98,13 +98,15 @@ function AppSidebar() {
             API Key
           </button>
           <button
-            className="w-full text-left px-3 py-2 rounded-lg text-xs text-error hover:bg-surface-container-lowest transition-colors"
-            onClick={() => {
-              resetLocalData()
+            className="w-full text-left px-3 py-2 rounded-lg text-xs text-on-surface-variant hover:bg-surface-container-lowest transition-colors"
+            onClick={async () => {
+              const confirmed = window.confirm('Log out of Donna?')
+              if (!confirmed) return
               setAccountMenuOpen(false)
+              await logoutSession(`${window.location.origin}/login`)
             }}
           >
-            Reset Local Data
+            Log Out
           </button>
         </div>
       </div>

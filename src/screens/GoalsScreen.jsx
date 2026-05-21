@@ -14,6 +14,33 @@ function minutesToHours(minutes) {
   return `${(Number(minutes || 0) / 60).toFixed(1)}h`
 }
 
+function GoalRing({ value = 0 }) {
+  const safe = Math.max(0, Math.min(100, Number(value || 0)))
+  const radius = 24
+  const circumference = 2 * Math.PI * radius
+  const offset = circumference * (1 - safe / 100)
+  return (
+    <div className="h-16 w-16">
+      <svg viewBox="0 0 64 64" className="h-full w-full">
+        <circle cx="32" cy="32" r={radius} stroke="rgba(171,179,183,0.35)" strokeWidth="6" fill="none" />
+        <circle
+          cx="32"
+          cy="32"
+          r={radius}
+          stroke="currentColor"
+          strokeWidth="6"
+          fill="none"
+          strokeLinecap="round"
+          className="text-primary"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          transform="rotate(-90 32 32)"
+        />
+      </svg>
+    </div>
+  )
+}
+
 function AddAspirationModal({ open, draft, setDraft, onClose, onSave }) {
   return (
     <AnimatePresence>
@@ -346,6 +373,10 @@ function GoalsScreen() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
+                      <div className="flex flex-col items-center justify-center mr-1">
+                        <GoalRing value={item.progress || 0} />
+                        <p className="text-[11px] mt-1 font-medium text-on-surface">{item.progress || 0}%</p>
+                      </div>
                       <button
                         type="button"
                         aria-label={`Complete ${item.title}`}
@@ -362,19 +393,6 @@ function GoalsScreen() {
                       >
                         <span className="material-symbols-outlined text-[18px]">delete</span>
                       </button>
-                    </div>
-                  </div>
-
-                  <div className="mt-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-[11px] uppercase tracking-widest text-on-surface-variant/70">Progress</p>
-                      <p className="text-sm font-medium text-on-surface">{item.progress || 0}%</p>
-                    </div>
-                    <div className="h-2 rounded-full bg-surface-container-high overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-primary-dim to-primary transition-all duration-500"
-                        style={{ width: `${Math.max(0, Math.min(100, Number(item.progress || 0)))}%` }}
-                      />
                     </div>
                   </div>
 

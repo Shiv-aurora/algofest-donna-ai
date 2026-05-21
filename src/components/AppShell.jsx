@@ -24,6 +24,7 @@ function AppShell({ activeRoute, html }) {
     dashboard,
     proposeStudyBlockAction,
     profile,
+    userMode,
     accountMenuOpen,
     setAccountMenuOpen,
     setApiKeyEditorOpen,
@@ -32,7 +33,7 @@ function AppShell({ activeRoute, html }) {
     toggleSessionPause,
     reorderPriorities,
     runPlanner,
-    resetLocalData
+    logoutSession
   } = useDashboard()
 
   const className = ROUTE_CLASSES[activeRoute] ?? ROUTE_CLASSES.dashboard
@@ -65,6 +66,15 @@ function AppShell({ activeRoute, html }) {
 
     const accountName = root.querySelector('[data-account-name]')
     if (accountName) accountName.textContent = profile.name
+
+    const greetingName = (() => {
+      if (userMode === 'guest') return 'Guest'
+      if (userMode === 'demo') return 'Demo'
+      const first = String(profile.name || '').trim().split(/\s+/)[0]
+      return first || 'there'
+    })()
+    const greeting = root.querySelector('[data-greeting-heading]')
+    if (greeting) greeting.textContent = `Good morning, ${greetingName}.`
 
     const accountMenu = root.querySelector('[data-account-menu]')
     if (accountMenu) accountMenu.classList.toggle('hidden', !accountMenuOpen)
@@ -125,6 +135,12 @@ function AppShell({ activeRoute, html }) {
     const score = root.querySelector('[data-focus-score]')
     if (score) score.textContent = String(dashboard.focus.score)
 
+    const readingPct = Math.max(0, Math.min(100, Number(dashboard.focus.score || 0) - 12))
+    const readingValue = root.querySelector('[data-focus-reading-value]')
+    if (readingValue) readingValue.textContent = `${readingPct}%`
+    const readingBar = root.querySelector('[data-focus-reading-bar]')
+    if (readingBar) readingBar.style.width = `${readingPct}%`
+
     const reason = root.querySelector('[data-focus-reason]')
     if (reason) reason.textContent = `"${dashboard.focus.reason}"`
 
@@ -138,7 +154,7 @@ function AppShell({ activeRoute, html }) {
     if (assignmentNote) assignmentNote.textContent = dashboard.focusAssignments.note
 
     return undefined
-  }, [activeRoute, dashboard, profile, accountMenuOpen])
+  }, [activeRoute, dashboard, profile, accountMenuOpen, userMode])
 
   useEffect(() => {
     const root = containerRef.current
@@ -253,9 +269,12 @@ function AppShell({ activeRoute, html }) {
         return
       }
 
-      if (action === 'account-reset') {
-        resetLocalData()
-        showToast('Local Donna data reset')
+      if (action === 'account-logout') {
+        const confirmed = window.confirm('Log out of Donna?')
+        if (!confirmed) return
+        setAccountMenuOpen(false)
+        await logoutSession(`${window.location.origin}/login`)
+        showToast('Logged out')
         return
       }
 
@@ -342,7 +361,8 @@ function AppShell({ activeRoute, html }) {
     setChatOpen,
     proposeStudyBlockAction,
     runPlanner,
-    resetLocalData
+    logoutSession,
+    userMode
   ])
 
   return (
@@ -356,7 +376,8 @@ function AppShell({ activeRoute, html }) {
             onAskDonna={(message) => {
               const text = String(message || '').trim()
               if (!text) return
-              runPlannerRef.current(text, 'replan')
+              setChatOpen(true)
+              runPlannerRef.current(text, 'chat')
             }}
           />,
           aiClockSlot

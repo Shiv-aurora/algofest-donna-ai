@@ -50,22 +50,24 @@ function ProviderRow({ title, subtitle, providerKey, providerState, onConnect, o
 function SettingsScreen() {
   const {
     profile,
+    userMode,
     settings,
     saveSettingsAndProfile,
     connectivityStatus,
     connectProvider,
     disconnectProvider,
     syncProvider,
+    logoutSession,
     authConnectivity,
-    refreshAuthConnectivity,
-    unreadInsightCount,
-    markAllInsightsRead
+    refreshAuthConnectivity
   } = useDashboard()
 
   const [draftProfile, setDraftProfile] = useState({ name: profile.name, email: profile.email })
   const [draftSettings, setDraftSettings] = useState(settings)
   const [blackboardDomain, setBlackboardDomain] = useState(connectivityStatus.blackboard?.institutionDomain || '')
   const [statusMessage, setStatusMessage] = useState('')
+  const sessionLabel =
+    userMode === 'google' ? 'Google Account' : userMode === 'guest' ? 'Guest Session' : 'Demo Session'
   const normalizeProviderLabel = (provider) => {
     if (provider === 'google_calendar') return 'Google Calendar'
     if (provider === 'blackboard') return 'Blackboard'
@@ -183,15 +185,7 @@ function SettingsScreen() {
               />
             </div>
           </div>
-          <button
-            className="material-symbols-outlined text-slate-400 hover:opacity-70 transition-opacity duration-300 relative"
-            onClick={markAllInsightsRead}
-          >
-            notifications
-            {unreadInsightCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 inline-flex h-2 w-2 rounded-full bg-primary" />
-            )}
-          </button>
+          <div className="w-8" />
         </header>
 
         <div className="max-w-5xl mx-auto px-12 py-12 pb-24">
@@ -233,16 +227,26 @@ function SettingsScreen() {
                       onChange={(event) => setDraftProfile((prev) => ({ ...prev, email: event.target.value }))}
                     />
                   </div>
+                  <button
+                    className="w-full mt-2 rounded-lg border border-outline-variant/30 px-4 py-2 text-sm text-on-surface-variant hover:bg-surface-container transition-colors"
+                    onClick={async () => {
+                      const confirmed = window.confirm('Log out of Donna?')
+                      if (!confirmed) return
+                      await logoutSession(`${window.location.origin}/login`)
+                    }}
+                  >
+                    Log Out
+                  </button>
                 </div>
               </div>
 
               <div className="bg-surface-container-low rounded-xl p-6 border-l-2 border-tertiary-container/30">
                 <h4 className="text-sm font-medium mb-2 text-on-tertiary-container flex items-center gap-2">
                   <span className="material-symbols-outlined text-base">auto_awesome</span>
-                  Scholar Status
+                  Session Status
                 </h4>
                 <p className="text-xs text-on-surface-variant leading-relaxed">
-                  You are currently on the <span className="font-semibold text-primary">Pro Curator</span> plan.
+                  Signed in via <span className="font-semibold text-primary">{sessionLabel}</span>.
                 </p>
               </div>
             </section>
@@ -326,125 +330,53 @@ function SettingsScreen() {
               </div>
 
               <div className="bg-surface-container-lowest rounded-xl p-8 shadow-[0px_20px_40px_rgba(43,52,55,0.02)]">
-                <div className="flex items-center gap-3 mb-6">
-                  <span className="material-symbols-outlined text-primary">layers</span>
-                  <h3 className="font-manrope text-xl font-light">Contextual Layers</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <label className="flex items-center justify-between">
-                    <span className="text-sm">Deadline pressure layer</span>
-                    <input
-                      className="rounded border-outline-variant/30 text-primary focus:ring-primary/20 w-4 h-4"
-                      type="checkbox"
-                      checked={draftSettings.contextualLayers.deadlinePressure}
-                      onChange={(event) =>
-                        setDraftSettings((prev) => ({
-                          ...prev,
-                          contextualLayers: {
-                            ...prev.contextualLayers,
-                            deadlinePressure: event.target.checked
-                          }
-                        }))
-                      }
-                    />
-                  </label>
-                  <label className="flex items-center justify-between">
-                    <span className="text-sm">Inactivity signals</span>
-                    <input
-                      className="rounded border-outline-variant/30 text-primary focus:ring-primary/20 w-4 h-4"
-                      type="checkbox"
-                      checked={draftSettings.contextualLayers.inactivitySignals}
-                      onChange={(event) =>
-                        setDraftSettings((prev) => ({
-                          ...prev,
-                          contextualLayers: {
-                            ...prev.contextualLayers,
-                            inactivitySignals: event.target.checked
-                          }
-                        }))
-                      }
-                    />
-                  </label>
-                  <label className="flex items-center justify-between">
-                    <span className="text-sm">Completion streaks</span>
-                    <input
-                      className="rounded border-outline-variant/30 text-primary focus:ring-primary/20 w-4 h-4"
-                      type="checkbox"
-                      checked={draftSettings.contextualLayers.completionStreaks}
-                      onChange={(event) =>
-                        setDraftSettings((prev) => ({
-                          ...prev,
-                          contextualLayers: {
-                            ...prev.contextualLayers,
-                            completionStreaks: event.target.checked
-                          }
-                        }))
-                      }
-                    />
-                  </label>
-                  <div className="space-y-2">
-                    <label className="text-sm block">Layer weight</label>
-                    <input
-                      className="w-full h-1 bg-surface-container rounded-lg appearance-none cursor-pointer accent-primary"
-                      type="range"
-                      min={0}
-                      max={100}
-                      value={draftSettings.contextualLayers.layerWeight}
-                      onChange={(event) =>
-                        setDraftSettings((prev) => ({
-                          ...prev,
-                          contextualLayers: {
-                            ...prev.contextualLayers,
-                            layerWeight: Number(event.target.value)
-                          }
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-surface-container-lowest rounded-xl p-8 shadow-[0px_20px_40px_rgba(43,52,55,0.02)]">
                 <div className="flex items-center gap-3 mb-8">
                   <span className="material-symbols-outlined text-primary">sync_alt</span>
                   <h3 className="font-manrope text-xl font-light">Connectivity</h3>
                 </div>
 
                 <h4 className="text-xs uppercase tracking-widest text-on-surface-variant mb-3">LMS Connectivity</h4>
-                <div className="space-y-4 mb-6">
-                  <ProviderRow
-                    title="Canvas LMS"
-                    subtitle="Academic LMS connector"
-                    providerKey="canvas"
-                    providerState={connectivity.canvas}
-                    onConnect={connectHandler}
-                    onDisconnect={disconnectHandler}
-                    onSync={syncHandler}
-                  />
-                  <div className="bg-surface-container-low rounded-xl p-4">
-                    <div className="mb-3">
-                      <h5 className="text-sm font-medium">Blackboard LMS</h5>
-                      <p className="text-xs text-on-surface-variant">
-                        Institution domain is required for Blackboard connection.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <input
-                        className="flex-1 rounded-lg border-none bg-surface-container-lowest px-3 py-2 text-xs focus:ring-1 focus:ring-primary/20"
-                        placeholder="Institution domain (e.g. university.blackboard.com)"
-                        value={blackboardDomain}
-                        onChange={(event) => setBlackboardDomain(event.target.value)}
-                      />
-                    </div>
+                <div className="relative mb-6">
+                  <div className="space-y-4 blur-[2px] opacity-70 pointer-events-none select-none" aria-hidden="true">
                     <ProviderRow
-                      title="Blackboard LMS"
-                      subtitle="Blackboard integration status"
-                      providerKey="blackboard"
-                      providerState={connectivity.blackboard}
+                      title="Canvas LMS"
+                      subtitle="Academic LMS connector"
+                      providerKey="canvas"
+                      providerState={connectivity.canvas}
                       onConnect={connectHandler}
                       onDisconnect={disconnectHandler}
                       onSync={syncHandler}
                     />
+                    <div className="bg-surface-container-low rounded-xl p-4">
+                      <div className="mb-3">
+                        <h5 className="text-sm font-medium">Blackboard LMS</h5>
+                        <p className="text-xs text-on-surface-variant">
+                          Institution domain is required for Blackboard connection.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <input
+                          className="flex-1 rounded-lg border-none bg-surface-container-lowest px-3 py-2 text-xs focus:ring-1 focus:ring-primary/20"
+                          placeholder="Institution domain (e.g. university.blackboard.com)"
+                          value={blackboardDomain}
+                          onChange={(event) => setBlackboardDomain(event.target.value)}
+                        />
+                      </div>
+                      <ProviderRow
+                        title="Blackboard LMS"
+                        subtitle="Blackboard integration status"
+                        providerKey="blackboard"
+                        providerState={connectivity.blackboard}
+                        onConnect={connectHandler}
+                        onDisconnect={disconnectHandler}
+                        onSync={syncHandler}
+                      />
+                    </div>
+                  </div>
+                  <div className="absolute inset-0 rounded-xl border border-outline-variant/20 bg-surface/30 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
+                    <span className="text-[11px] uppercase tracking-[0.2em] text-on-surface-variant font-medium">
+                      Coming Soon
+                    </span>
                   </div>
                 </div>
 

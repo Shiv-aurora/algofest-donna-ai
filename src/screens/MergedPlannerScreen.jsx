@@ -373,8 +373,6 @@ function MergedPlannerScreen() {
             <button className="text-slate-900 font-medium border-b border-slate-400 text-sm tracking-tight font-headline py-1">
               Weekly View
             </button>
-            <button className="text-slate-500 text-sm tracking-tight font-headline py-1">Monthly</button>
-            <button className="text-slate-500 text-sm tracking-tight font-headline py-1">Resources</button>
           </div>
           <button
             className="material-symbols-outlined text-slate-500 hover:text-slate-700 transition-colors relative"
