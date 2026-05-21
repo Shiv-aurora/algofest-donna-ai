@@ -13,14 +13,13 @@ import {
   DEFAULT_PROFILE,
   DEFAULT_SETTINGS_STATE,
   STORAGE_KEYS,
+  getModeDefaults,
   applyPlannerResult,
-  buildFocusReason,
   buildPlannerRequest,
   chooseModelRoute,
   hydrateState,
   recomputeFocusState,
-  runLocalPlanner,
-  runOpenAIPlanner
+  runLocalPlanner
 } from './dashboardEngine'
 import {
   ConnectivityApiError,
@@ -28,11 +27,13 @@ import {
   connectProviderApi,
   disconnectProviderApi,
   fetchProviders,
-  getDonnaCalendarContext,
   getAuthMe,
+  getDonnaCalendarContext,
+  getDonnaPlannerUsage,
   listDonnaActions,
   logoutAuth,
   proposeStudyBlock,
+  runDonnaPlannerApi,
   syncProviderApi
 } from './connectivityApi'
 
@@ -236,34 +237,99 @@ function toCanonicalFailure(code, message, extra = {}) {
 
 function mapConnectivityError(error) {
   const message = String(error?.message || '').trim()
-  const backendReason = String(error?.details?.reason || error?.details?.details?.reason || '').trim()
+  const backendReason = String(
+    error?.details?.reasonCode ||
+      error?.details?.reason ||
+      error?.details?.details?.reasonCode ||
+      error?.details?.details?.reason ||
+      ''
+  ).trim()
+  const usage = error?.details?.usage || null
   if (!message) return { state: 'provider_error', reason: 'provider_error', message: 'Unable to complete request.' }
 
   if (error instanceof ConnectivityApiError) {
+    if (backendReason === 'byok_required') {
+      return {
+        state: 'authenticated_unconnected',
+        reason: 'byok_required',
+        message: message || 'Free quota reached. Add your API key to continue.',
+        usage
+      }
+    }
+    if (backendReason === 'quota_exceeded_hourly_ip') {
+      return {
+        state: 'provider_error',
+        reason: 'quota_exceeded_hourly_ip',
+        message: message || 'Hourly free limit reached for this network.',
+        usage
+      }
+    }
+    if (backendReason === 'quota_exceeded_daily_user') {
+      return {
+        state: 'provider_error',
+        reason: 'quota_exceeded_daily_user',
+        message: message || 'Daily free message limit reached.',
+        usage
+      }
+    }
+    if (backendReason === 'quota_exceeded_weekly_tokens') {
+      return {
+        state: 'provider_error',
+        reason: 'quota_exceeded_weekly_tokens',
+        message: message || 'Weekly free token limit reached.',
+        usage
+      }
+    }
     if (backendReason === 'connect_provider_required') {
       return {
         state: 'authenticated_unconnected',
         reason: 'connect_provider_required',
-        message: 'Google Calendar is not connected.'
+        message: 'Google Calendar is not connected.',
+        usage
       }
     }
     if (backendReason === 'execution_failed') {
-      return { state: 'provider_error', reason: 'execution_failed', message: 'Calendar execution failed.' }
+      return {
+        state: 'provider_error',
+        reason: 'execution_failed',
+        message: 'Calendar execution failed.',
+        usage
+      }
     }
     if (error.code === 'AUTH_REQUIRED' || error.status === 401) {
-      return { state: 'unauthenticated', reason: 'login_required', message: 'Sign in required.' }
+      return { state: 'unauthenticated', reason: 'login_required', message: 'Sign in required.', usage }
     }
     if (error.status === 409) {
-      return { state: 'provider_error', reason: 'execution_failed', message: 'Action is no longer approvable.' }
+      return {
+        state: 'provider_error',
+        reason: 'execution_failed',
+        message: 'Action is no longer approvable.',
+        usage
+      }
     }
     if (error.status === 502) {
-      return { state: 'provider_error', reason: 'execution_failed', message: 'Calendar execution failed.' }
+      return {
+        state: 'provider_error',
+        reason: 'execution_failed',
+        message: 'Calendar execution failed.',
+        usage
+      }
     }
     if (error.status === 0 || message.includes('Failed to fetch')) {
-      return { state: 'backend_unavailable', reason: 'backend_unavailable', message: 'Backend unavailable.' }
+      return {
+        state: 'backend_unavailable',
+        reason: 'backend_unavailable',
+        message: 'Backend unavailable.',
+        usage
+      }
     }
     if (error.status >= 500 || message.includes('Google Calendar integration is not configured')) {
-      return { state: 'misconfigured', reason: 'misconfigured', message: 'Calendar backend misconfigured.' }
+      return {
+        state: 'misconfigured',
+        reason: 'misconfigured',
+        message: 'Calendar backend misconfigured.',
+        usage
+      }
     }
   }
 
@@ -271,11 +337,12 @@ function mapConnectivityError(error) {
     return {
       state: 'authenticated_unconnected',
       reason: 'connect_provider_required',
-      message: 'Google Calendar is not connected.'
+      message: 'Google Calendar is not connected.',
+      usage
     }
   }
 
-  return { state: 'provider_error', reason: 'provider_error', message }
+  return { state: 'provider_error', reason: 'provider_error', message, usage }
 }
 
 function deriveAuthConnectivityState({ loading, auth, connectivityStatus, lastError }) {
@@ -332,32 +399,146 @@ function deriveAuthConnectivityState({ loading, auth, connectivityStatus, lastEr
   }
 }
 
+function scopedStorageKey(baseKey, scope) {
+  return `${baseKey}::${scope}`
+}
+
+function readScopedStorage(baseKey, scope) {
+  if (!scope) return null
+  return localStorage.getItem(scopedStorageKey(baseKey, scope))
+}
+
+function readScopedSessionStorage(baseKey, scope) {
+  if (!scope) return null
+  try {
+    return sessionStorage.getItem(scopedStorageKey(baseKey, scope))
+  } catch {
+    return null
+  }
+}
+
+function removeScopedStorage(baseKey, scope) {
+  if (!scope) return
+  localStorage.removeItem(scopedStorageKey(baseKey, scope))
+}
+
+function writeScopedSessionStorage(baseKey, scope, value) {
+  if (!scope) return
+  try {
+    sessionStorage.setItem(scopedStorageKey(baseKey, scope), value)
+  } catch {
+    // no-op: private mode or blocked storage
+  }
+}
+
+function removeScopedSessionStorage(baseKey, scope) {
+  if (!scope) return
+  try {
+    sessionStorage.removeItem(scopedStorageKey(baseKey, scope))
+  } catch {
+    // no-op: private mode or blocked storage
+  }
+}
+
+function toUserMode(user) {
+  const mode = String(user?.mode || '').trim().toLowerCase()
+  if (mode === 'demo' || mode === 'google' || mode === 'guest') return mode
+  return 'guest'
+}
+
+function sanitizeLegacyProfile(profileValue, mode = 'guest') {
+  const profile = profileValue && typeof profileValue === 'object' ? profileValue : {}
+  const name = String(profile.name || '').trim()
+  const email = String(profile.email || '').trim()
+
+  if (name === 'Shivam Arora' || email === 'shivam@donna.local') {
+    return {
+      ...profile,
+      name: 'Elena Vance',
+      email: mode === 'google' ? '' : 'elena@donna.demo'
+    }
+  }
+
+  return profile
+}
+
+function readBooleanStorage(rawValue, fallback = false) {
+  if (rawValue === null || rawValue === undefined) return fallback
+  if (typeof rawValue === 'boolean') return rawValue
+  const normalized = String(rawValue).trim().toLowerCase()
+  if (!normalized) return fallback
+  if (normalized === 'true') return true
+  if (normalized === 'false') return false
+  try {
+    const parsed = JSON.parse(rawValue)
+    return typeof parsed === 'boolean' ? parsed : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function deriveProfileFromAuthUser(authUser, mode, currentProfile) {
+  const next = { ...(currentProfile || {}) }
+  const rawName = String(authUser?.name || '').trim()
+  const rawEmail = String(authUser?.email || '').trim()
+  const rawPicture = String(authUser?.picture || '').trim()
+
+  if (mode === 'google') {
+    const emailLocal = rawEmail.includes('@') ? rawEmail.split('@')[0] : ''
+    next.name = rawName || emailLocal || 'Google User'
+    next.email = rawEmail
+    if (rawPicture) next.avatar = rawPicture
+    next.role = 'Student'
+    return next
+  }
+
+  if (mode === 'guest') {
+    next.name = rawName || 'Guest User'
+    next.email = rawEmail
+    next.role = 'Guest'
+    return next
+  }
+
+  if (mode === 'demo') {
+    next.name = rawName || 'Donna Demo User'
+    next.email = rawEmail || 'demo@donna.app'
+    next.role = 'Demo'
+    return next
+  }
+
+  return next
+}
+
+function isGreetingOnlyMessage(text) {
+  const normalized = String(text || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ')
+  if (!normalized) return false
+  const greetings = new Set([
+    'hi',
+    'hey',
+    'hello',
+    'yo',
+    'sup',
+    'hii',
+    'heyy',
+    'hiya',
+    'good morning',
+    'good afternoon',
+    'good evening'
+  ])
+  return greetings.has(normalized)
+}
+
 export function DashboardProvider({ children }) {
   const apiKeyRef = useRef('')
 
-  const hydrated = useMemo(
-    () =>
-      hydrateState({
-        profileRaw: localStorage.getItem(STORAGE_KEYS.profile),
-        dashboardRaw: localStorage.getItem(STORAGE_KEYS.dashboard),
-        chatRaw: localStorage.getItem(STORAGE_KEYS.chat),
-        focusHistoryRaw: localStorage.getItem(STORAGE_KEYS.focusHistory),
-        apiKeyRaw: localStorage.getItem(STORAGE_KEYS.apiKey),
-        aspirationsRaw: localStorage.getItem(STORAGE_KEYS.aspirations),
-        aspirationsArchiveRaw: localStorage.getItem(STORAGE_KEYS.aspirationsArchive),
-        aspirationSessionsRaw: localStorage.getItem(STORAGE_KEYS.aspirationSessions),
-        settingsRaw: localStorage.getItem(STORAGE_KEYS.settings),
-        insightDeskRaw: localStorage.getItem(STORAGE_KEYS.insightDesk),
-        connectivityStatusRaw: localStorage.getItem(STORAGE_KEYS.connectivityStatus),
-        calendarEventsRaw: localStorage.getItem(STORAGE_KEYS.calendarEvents),
-        assignmentsRaw: localStorage.getItem(STORAGE_KEYS.assignments),
-        examsRaw: localStorage.getItem(STORAGE_KEYS.exams),
-        examStudySessionsRaw: localStorage.getItem(STORAGE_KEYS.examStudySessions)
-      }),
-    []
-  )
+  const hydrated = useMemo(() => getModeDefaults('guest'), [])
 
   const [profile, setProfile] = useState(hydrated.profile || DEFAULT_PROFILE)
+  const [onboardingCompleted, setOnboardingCompleted] = useState(Boolean(hydrated.onboardingCompleted))
   const [dashboard, setDashboard] = useState(hydrated.dashboard || DEFAULT_DASHBOARD_STATE)
   const [chatMessages, setChatMessages] = useState(hydrated.chat || DEFAULT_CHAT_MESSAGES)
   const [focusHistory, setFocusHistory] = useState(hydrated.focusHistory || [])
@@ -386,9 +567,11 @@ export function DashboardProvider({ children }) {
   const [authState, setAuthState] = useState({
     authenticated: false,
     user: null,
-    loginUrl: '/api/auth/login',
+    loginUrl: '/login',
     logoutUrl: '/api/auth/logout'
   })
+  const [storageScope, setStorageScope] = useState(null)
+  const [userMode, setUserMode] = useState('guest')
   const [authConnectivityLoading, setAuthConnectivityLoading] = useState(true)
   const [authConnectivityRefreshing, setAuthConnectivityRefreshing] = useState(false)
   const [authConnectivityError, setAuthConnectivityError] = useState(null)
@@ -400,6 +583,8 @@ export function DashboardProvider({ children }) {
     actionId: '',
     lastResult: null
   })
+  const [plannerUsage, setPlannerUsage] = useState(null)
+  const [plannerUsageLoading, setPlannerUsageLoading] = useState(false)
   const [calendarEvents, setCalendarEvents] = useState(() =>
     (hydrated.calendarEvents || DEFAULT_CALENDAR_EVENTS).map((item, index) =>
       normalizeCalendarEvent(item, index)
@@ -429,6 +614,91 @@ export function DashboardProvider({ children }) {
     setDonnaActionsLoading(false)
     setDonnaActionsError(null)
     setDonnaActionExecution({ inFlight: false, actionId: '', lastResult: null })
+    setPlannerUsage(null)
+    setPlannerUsageLoading(false)
+  }, [])
+
+  const applyHydratedState = useCallback((nextState, mode = 'guest') => {
+    const fallback = getModeDefaults(mode)
+    const source = nextState || fallback
+    const safeProfile = sanitizeLegacyProfile(source.profile || fallback.profile, mode)
+    setUserMode(mode)
+    setProfile(safeProfile)
+    setOnboardingCompleted(Boolean(source.onboardingCompleted ?? fallback.onboardingCompleted ?? mode === 'demo'))
+    setDashboard(source.dashboard || fallback.dashboard)
+    setChatMessages(Array.isArray(source.chat) && source.chat.length > 0 ? source.chat : fallback.chat)
+    setFocusHistory(Array.isArray(source.focusHistory) ? source.focusHistory : fallback.focusHistory)
+    setApiKey(String(source.apiKey || ''))
+    setAspirations((source.aspirations || fallback.aspirations).map((item, index) => normalizeAspiration(item, index)))
+    setAspirationsArchive((source.aspirationsArchive || []).map((item, index) => normalizeAspiration(item, index)))
+    setAspirationSessions((source.aspirationSessions || fallback.aspirationSessions).map((item, index) =>
+      normalizeSession(item, index, 'asp')
+    ))
+    setSettings(normalizeSettings(source.settings || fallback.settings))
+    setInsightDesk(Array.isArray(source.insightDesk) ? source.insightDesk : fallback.insightDesk)
+    setConnectivityStatus(normalizeConnectivity(source.connectivityStatus || fallback.connectivityStatus))
+    setCalendarEvents((source.calendarEvents || fallback.calendarEvents).map((item, index) =>
+      normalizeCalendarEvent(item, index)
+    ))
+    setAssignments((source.assignments || fallback.assignments).map((item, index) =>
+      normalizeAssignment(item, index)
+    ))
+    setExams((source.exams || fallback.exams).map((item, index) => normalizeExam(item, index)))
+    setExamStudySessions((source.examStudySessions || fallback.examStudySessions).map((item, index) =>
+      normalizeSession(item, index, 'exam')
+    ))
+  }, [])
+
+  const hydrateForSession = useCallback((scope, mode = 'guest') => {
+    if (!scope) return getModeDefaults(mode)
+    const fallback = getModeDefaults(mode)
+
+    const hydratedState = hydrateState({
+      profileRaw: readScopedStorage(STORAGE_KEYS.profile, scope),
+      dashboardRaw: readScopedStorage(STORAGE_KEYS.dashboard, scope),
+      chatRaw: readScopedStorage(STORAGE_KEYS.chat, scope),
+      focusHistoryRaw: readScopedStorage(STORAGE_KEYS.focusHistory, scope),
+      apiKeyRaw: readScopedSessionStorage(STORAGE_KEYS.apiKey, scope) || readScopedStorage(STORAGE_KEYS.apiKey, scope),
+      aspirationsRaw: readScopedStorage(STORAGE_KEYS.aspirations, scope),
+      aspirationsArchiveRaw: readScopedStorage(STORAGE_KEYS.aspirationsArchive, scope),
+      aspirationSessionsRaw: readScopedStorage(STORAGE_KEYS.aspirationSessions, scope),
+      settingsRaw: readScopedStorage(STORAGE_KEYS.settings, scope),
+      insightDeskRaw: readScopedStorage(STORAGE_KEYS.insightDesk, scope),
+      connectivityStatusRaw: readScopedStorage(STORAGE_KEYS.connectivityStatus, scope),
+      calendarEventsRaw: readScopedStorage(STORAGE_KEYS.calendarEvents, scope),
+      assignmentsRaw: readScopedStorage(STORAGE_KEYS.assignments, scope),
+      examsRaw: readScopedStorage(STORAGE_KEYS.exams, scope),
+      examStudySessionsRaw: readScopedStorage(STORAGE_KEYS.examStudySessions, scope)
+    })
+    const onboardingRaw = readScopedStorage(STORAGE_KEYS.onboarding, scope)
+
+    const profileRaw = readScopedStorage(STORAGE_KEYS.profile, scope)
+    const dashboardRaw = readScopedStorage(STORAGE_KEYS.dashboard, scope)
+    const chatRaw = readScopedStorage(STORAGE_KEYS.chat, scope)
+    const aspirationsRaw = readScopedStorage(STORAGE_KEYS.aspirations, scope)
+    const calendarEventsRaw = readScopedStorage(STORAGE_KEYS.calendarEvents, scope)
+    const assignmentsRaw = readScopedStorage(STORAGE_KEYS.assignments, scope)
+
+    const hasAnyData = [
+      profileRaw,
+      dashboardRaw,
+      chatRaw,
+      aspirationsRaw,
+      calendarEventsRaw,
+      assignmentsRaw
+    ].some((item) => Boolean(String(item || '').trim()))
+
+    if (!hasAnyData) {
+      return {
+        ...fallback,
+        onboardingCompleted: readBooleanStorage(onboardingRaw, Boolean(fallback.onboardingCompleted))
+      }
+    }
+
+    return {
+      ...hydratedState,
+      onboardingCompleted: readBooleanStorage(onboardingRaw, Boolean(fallback.onboardingCompleted))
+    }
   }, [])
 
   const unreadInsightCount = useMemo(
@@ -460,66 +730,124 @@ export function DashboardProvider({ children }) {
     connectivityStatus
   ])
 
+  const refreshPlannerUsage = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!authState.authenticated) {
+        setPlannerUsage(null)
+        setPlannerUsageLoading(false)
+        return { ok: false, reason: 'login_required' }
+      }
+      if (!silent) setPlannerUsageLoading(true)
+      try {
+        const usage = await getDonnaPlannerUsage()
+        setPlannerUsage(usage)
+        return { ok: true, usage }
+      } catch (error) {
+        const mapped = mapConnectivityError(error)
+        setAuthConnectivityError(mapped)
+        return { ok: false, ...mapped }
+      } finally {
+        setPlannerUsageLoading(false)
+      }
+    },
+    [authState.authenticated]
+  )
+
   useEffect(() => {
     apiKeyRef.current = apiKey
-    localStorage.setItem(STORAGE_KEYS.apiKey, apiKey)
-  }, [apiKey])
+    if (!storageScope) return undefined
+    writeScopedSessionStorage(STORAGE_KEYS.apiKey, storageScope, apiKey)
+    // Remove any legacy persistent key copy.
+    removeScopedStorage(STORAGE_KEYS.apiKey, storageScope)
+    return undefined
+  }, [apiKey, storageScope])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(profile))
-  }, [profile])
+    if (!storageScope) return
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.profile, storageScope), JSON.stringify(profile))
+  }, [profile, storageScope])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.dashboard, JSON.stringify(dashboard))
-  }, [dashboard])
+    if (!storageScope) return
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.onboarding, storageScope), JSON.stringify(onboardingCompleted))
+  }, [onboardingCompleted, storageScope])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.chat, JSON.stringify(chatMessages))
-  }, [chatMessages])
+    if (!storageScope) return
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.dashboard, storageScope), JSON.stringify(dashboard))
+  }, [dashboard, storageScope])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.focusHistory, JSON.stringify(focusHistory))
-  }, [focusHistory])
+    if (!storageScope) return
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.chat, storageScope), JSON.stringify(chatMessages))
+  }, [chatMessages, storageScope])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.aspirations, JSON.stringify(aspirations))
-  }, [aspirations])
+    if (!storageScope) return
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.focusHistory, storageScope), JSON.stringify(focusHistory))
+  }, [focusHistory, storageScope])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.aspirationsArchive, JSON.stringify(aspirationsArchive))
-  }, [aspirationsArchive])
+    if (!storageScope) return
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.aspirations, storageScope), JSON.stringify(aspirations))
+  }, [aspirations, storageScope])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.aspirationSessions, JSON.stringify(aspirationSessions))
-  }, [aspirationSessions])
+    if (!storageScope) return
+    localStorage.setItem(
+      scopedStorageKey(STORAGE_KEYS.aspirationsArchive, storageScope),
+      JSON.stringify(aspirationsArchive)
+    )
+  }, [aspirationsArchive, storageScope])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings))
-  }, [settings])
+    if (!storageScope) return
+    localStorage.setItem(
+      scopedStorageKey(STORAGE_KEYS.aspirationSessions, storageScope),
+      JSON.stringify(aspirationSessions)
+    )
+  }, [aspirationSessions, storageScope])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.insightDesk, JSON.stringify(insightDesk))
-  }, [insightDesk])
+    if (!storageScope) return
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.settings, storageScope), JSON.stringify(settings))
+  }, [settings, storageScope])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.connectivityStatus, JSON.stringify(connectivityStatus))
-  }, [connectivityStatus])
+    if (!storageScope) return
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.insightDesk, storageScope), JSON.stringify(insightDesk))
+  }, [insightDesk, storageScope])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.calendarEvents, JSON.stringify(calendarEvents))
-  }, [calendarEvents])
+    if (!storageScope) return
+    localStorage.setItem(
+      scopedStorageKey(STORAGE_KEYS.connectivityStatus, storageScope),
+      JSON.stringify(connectivityStatus)
+    )
+  }, [connectivityStatus, storageScope])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.assignments, JSON.stringify(assignments))
-  }, [assignments])
+    if (!storageScope) return
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.calendarEvents, storageScope), JSON.stringify(calendarEvents))
+  }, [calendarEvents, storageScope])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.exams, JSON.stringify(exams))
-  }, [exams])
+    if (!storageScope) return
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.assignments, storageScope), JSON.stringify(assignments))
+  }, [assignments, storageScope])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.examStudySessions, JSON.stringify(examStudySessions))
-  }, [examStudySessions])
+    if (!storageScope) return
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.exams, storageScope), JSON.stringify(exams))
+  }, [exams, storageScope])
+
+  useEffect(() => {
+    if (!storageScope) return
+    localStorage.setItem(
+      scopedStorageKey(STORAGE_KEYS.examStudySessions, storageScope),
+      JSON.stringify(examStudySessions)
+    )
+  }, [examStudySessions, storageScope])
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -535,7 +863,7 @@ export function DashboardProvider({ children }) {
         }
 
         if (next.session.remainingSeconds % 60 === 0) {
-          const scored = recomputeFocusState(next, buildFocusReason(next, next.focus.score))
+          const scored = recomputeFocusState(next)
           setFocusHistory((history) => [...history.slice(-49), { ts: Date.now(), score: scored.focus.score }])
           return scored
         }
@@ -556,7 +884,7 @@ export function DashboardProvider({ children }) {
       const authSnapshot = {
         authenticated: Boolean(authData?.authenticated),
         user: authData?.user || null,
-        loginUrl: String(authData?.loginUrl || '/api/auth/login'),
+        loginUrl: String(authData?.loginUrl || '/login'),
         logoutUrl: String(authData?.logoutUrl || '/api/auth/logout')
       }
 
@@ -564,6 +892,15 @@ export function DashboardProvider({ children }) {
 
       let providerData = null
       if (authSnapshot.authenticated) {
+        const mode = toUserMode(authSnapshot.user)
+        const scope = String(authSnapshot.user?.sub || '')
+        setStorageScope(scope || null)
+        const hydratedForUser = hydrateForSession(scope, mode)
+        applyHydratedState(hydratedForUser, mode)
+        setProfile((current) =>
+          deriveProfileFromAuthUser(authSnapshot.user, mode, sanitizeLegacyProfile(current, mode))
+        )
+
         providerData = await fetchProviders()
         if (providerData && typeof providerData.providers === 'object') {
           setConnectivityStatus((prev) =>
@@ -574,6 +911,8 @@ export function DashboardProvider({ children }) {
           )
         }
       } else {
+        setStorageScope(null)
+        applyHydratedState(getModeDefaults('guest'), 'guest')
         clearExternalRuntimeState()
       }
 
@@ -604,7 +943,7 @@ export function DashboardProvider({ children }) {
       setAuthConnectivityLoading(false)
       setAuthConnectivityRefreshing(false)
     }
-  }, [clearExternalRuntimeState])
+  }, [applyHydratedState, clearExternalRuntimeState, hydrateForSession])
 
   useEffect(() => {
     let cancelled = false
@@ -1013,7 +1352,7 @@ export function DashboardProvider({ children }) {
         ok: false,
         code: 'login_required',
         ...state,
-        loginUrl: authState.loginUrl || '/api/auth/login'
+        loginUrl: authState.loginUrl || '/login'
       }
     }
 
@@ -1183,13 +1522,23 @@ export function DashboardProvider({ children }) {
     const trimmed = String(message || '').trim()
     if (!trimmed || sending) return
 
+    if (source === 'chat' && isGreetingOnlyMessage(trimmed)) {
+      pushUserMessage(trimmed)
+      pushAssistantMessage(
+        'Hi. I can optimize your plan, propose a study block, and schedule it after your approval.',
+        'local'
+      )
+      return
+    }
+
     pushUserMessage(trimmed)
     setSending(true)
 
     const routeDecision = chooseModelRoute({
       message: trimmed,
       state: dashboard,
-      hasApiKey: Boolean(apiKeyRef.current)
+      hasApiKey: Boolean(apiKeyRef.current),
+      hasServerPlanner: true
     })
 
     const plannerRequest = {
@@ -1210,20 +1559,53 @@ export function DashboardProvider({ children }) {
       if (routeDecision.route === 'local') {
         plannerResult = runLocalPlanner(dashboard, trimmed, source)
       } else {
-        plannerResult = await runOpenAIPlanner({
-          apiKey: apiKeyRef.current,
+        plannerResult = await runDonnaPlannerApi({
           request: plannerRequest,
           route: routeDecision.route,
-          source
+          source,
+          apiKey: apiKeyRef.current || undefined
         })
+        if (plannerResult?.usage) {
+          setPlannerUsage({
+            ok: true,
+            eligibility: plannerResult?.eligibility || null,
+            ...(plannerResult.usage || {})
+          })
+        }
       }
 
       applyResult(plannerResult, source === 'chat' ? 'replan' : source)
       pushAssistantMessage(plannerResult.assistantMessage, plannerResult.route)
-    } catch {
+    } catch (error) {
+      const mapped = mapConnectivityError(error)
+      if (mapped?.usage?.limits) {
+        setPlannerUsage((prev) => ({
+          ok: true,
+          eligibility: prev?.eligibility || null,
+          ...mapped.usage
+        }))
+      }
+      if (
+        mapped.reason === 'backend_unavailable' ||
+        mapped.reason === 'misconfigured' ||
+        mapped.reason === 'provider_error'
+      ) {
+        setAuthConnectivityError(mapped)
+      }
       const fallback = runLocalPlanner(dashboard, trimmed, source)
-      fallback.assistantMessage =
-        'I switched to local planning for reliability and updated your plan. Add or refresh your BYOK key for cloud reasoning.'
+      if (
+        mapped.reason === 'byok_required' ||
+        mapped.reason === 'quota_exceeded_hourly_ip' ||
+        mapped.reason === 'quota_exceeded_daily_user' ||
+        mapped.reason === 'quota_exceeded_weekly_tokens'
+      ) {
+        fallback.assistantMessage = `${mapped.message} I switched to local planning. Add your API key to continue cloud responses.`
+      } else if (mapped.reason === 'login_required') {
+        fallback.assistantMessage = 'Sign in is required for cloud planning. I switched to local planning for now.'
+      } else {
+        fallback.assistantMessage =
+          'I switched to local planning for reliability and updated your plan. Add or refresh your BYOK key for cloud reasoning.'
+      }
       applyResult(fallback, source === 'chat' ? 'replan' : source)
       pushAssistantMessage(fallback.assistantMessage, 'local')
     } finally {
@@ -1653,6 +2035,15 @@ export function DashboardProvider({ children }) {
     fetchDonnaActions({ silent: true })
   }, [authState.authenticated, clearExternalRuntimeState, fetchDonnaActions])
 
+  useEffect(() => {
+    if (!authState.authenticated) {
+      setPlannerUsage(null)
+      setPlannerUsageLoading(false)
+      return
+    }
+    refreshPlannerUsage({ silent: true })
+  }, [authState.authenticated, refreshPlannerUsage])
+
   const createCalendarEvent = (payload) => {
     const title = String(payload?.title || '').trim()
     const date = String(payload?.date || '').trim()
@@ -1715,43 +2106,50 @@ export function DashboardProvider({ children }) {
     pushInsight('donna', 'Settings updated', 'Configuration changes were saved.', 'success')
   }
 
-  const resetLocalData = () => {
-    localStorage.removeItem(STORAGE_KEYS.profile)
-    localStorage.removeItem(STORAGE_KEYS.dashboard)
-    localStorage.removeItem(STORAGE_KEYS.chat)
-    localStorage.removeItem(STORAGE_KEYS.focusHistory)
-    localStorage.removeItem(STORAGE_KEYS.apiKey)
-    localStorage.removeItem(STORAGE_KEYS.aspirations)
-    localStorage.removeItem(STORAGE_KEYS.aspirationsArchive)
-    localStorage.removeItem(STORAGE_KEYS.aspirationSessions)
-    localStorage.removeItem(STORAGE_KEYS.settings)
-    localStorage.removeItem(STORAGE_KEYS.insightDesk)
-    localStorage.removeItem(STORAGE_KEYS.connectivityStatus)
-    localStorage.removeItem(STORAGE_KEYS.calendarEvents)
-    localStorage.removeItem(STORAGE_KEYS.assignments)
-    localStorage.removeItem(STORAGE_KEYS.exams)
-    localStorage.removeItem(STORAGE_KEYS.examStudySessions)
+  const completeOnboarding = ({ name, institution, major, focus } = {}) => {
+    const safeName = String(name || '').trim()
+    const safeInstitution = String(institution || '').trim()
+    const safeMajor = String(major || '').trim()
+    const safeFocus = String(focus || '').trim()
 
-    setProfile(DEFAULT_PROFILE)
-    setDashboard(DEFAULT_DASHBOARD_STATE)
-    setChatMessages(DEFAULT_CHAT_MESSAGES)
-    setFocusHistory([])
-    setApiKey('')
-    setAspirations(DEFAULT_ASPIRATIONS)
-    setAspirationsArchive([])
-    setAspirationSessions(DEFAULT_ASPIRATION_SESSIONS)
-    setSettings(DEFAULT_SETTINGS_STATE)
-    setInsightDesk(DEFAULT_INSIGHT_DESK)
-    setConnectivityStatus(DEFAULT_CONNECTIVITY_STATUS)
+    setProfile((prev) => ({
+      ...prev,
+      ...(safeName ? { name: safeName } : {}),
+      ...(safeInstitution ? { institution: safeInstitution } : {}),
+      ...(safeMajor ? { major: safeMajor } : {}),
+      ...(safeFocus ? { focus: safeFocus } : {})
+    }))
+    setOnboardingCompleted(true)
+    pushInsight('donna', 'Welcome to Donna', 'Onboarding complete. Your workspace is ready.', 'success')
+  }
+
+  const resetLocalData = () => {
+    if (storageScope) {
+      removeScopedStorage(STORAGE_KEYS.profile, storageScope)
+      removeScopedStorage(STORAGE_KEYS.onboarding, storageScope)
+      removeScopedStorage(STORAGE_KEYS.dashboard, storageScope)
+      removeScopedStorage(STORAGE_KEYS.chat, storageScope)
+      removeScopedStorage(STORAGE_KEYS.focusHistory, storageScope)
+      removeScopedStorage(STORAGE_KEYS.apiKey, storageScope)
+      removeScopedSessionStorage(STORAGE_KEYS.apiKey, storageScope)
+      removeScopedStorage(STORAGE_KEYS.aspirations, storageScope)
+      removeScopedStorage(STORAGE_KEYS.aspirationsArchive, storageScope)
+      removeScopedStorage(STORAGE_KEYS.aspirationSessions, storageScope)
+      removeScopedStorage(STORAGE_KEYS.settings, storageScope)
+      removeScopedStorage(STORAGE_KEYS.insightDesk, storageScope)
+      removeScopedStorage(STORAGE_KEYS.connectivityStatus, storageScope)
+      removeScopedStorage(STORAGE_KEYS.calendarEvents, storageScope)
+      removeScopedStorage(STORAGE_KEYS.assignments, storageScope)
+      removeScopedStorage(STORAGE_KEYS.exams, storageScope)
+      removeScopedStorage(STORAGE_KEYS.examStudySessions, storageScope)
+    }
+
+    applyHydratedState(getModeDefaults(userMode), userMode)
     setAuthConnectivityError(null)
     setDonnaActions([])
     setDonnaActionsLoading(false)
     setDonnaActionsError(null)
     setDonnaActionExecution({ inFlight: false, actionId: '', lastResult: null })
-    setCalendarEvents(DEFAULT_CALENDAR_EVENTS)
-    setAssignments(DEFAULT_ASSIGNMENTS)
-    setExams(DEFAULT_EXAMS)
-    setExamStudySessions(DEFAULT_EXAM_STUDY_SESSIONS)
     setAccountMenuOpen(false)
   }
 
@@ -1760,7 +2158,7 @@ export function DashboardProvider({ children }) {
   }
 
   const startLogin = (returnTo = window.location.href) => {
-    const base = authState.loginUrl || '/api/auth/login'
+    const base = authState.loginUrl || '/login'
     const absolute = base.startsWith('http') ? base : `${window.location.origin}${base}`
     const target = new URL(absolute)
     target.searchParams.set('returnTo', returnTo)
@@ -1805,10 +2203,16 @@ export function DashboardProvider({ children }) {
     clearApiKey: () => setApiKey(''),
     authState,
     authConnectivity,
+    userMode,
+    onboardingCompleted,
     refreshAuthConnectivity,
+    plannerUsage,
+    plannerUsageLoading,
+    refreshPlannerUsage,
     startLogin,
     logoutSession,
     setProfile,
+    completeOnboarding,
     aspirations,
     aspirationsArchive,
     aspirationSessions,

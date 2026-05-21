@@ -25,6 +25,7 @@ function toDateKey(date) {
 
 export const STORAGE_KEYS = {
   profile: 'donna.profile',
+  onboarding: 'donna.onboarding',
   dashboard: 'donna.dashboardState',
   chat: 'donna.chatHistory',
   focusHistory: 'donna.focusHistory',
@@ -42,8 +43,8 @@ export const STORAGE_KEYS = {
 }
 
 export const DEFAULT_PROFILE = {
-  name: 'Shivam Arora',
-  email: 'shivam@donna.local',
+  name: 'Elena Vance',
+  email: 'elena@donna.demo',
   role: 'Premium Student',
   avatar: '/images/overview-profile.jpg'
 }
@@ -411,6 +412,180 @@ export const DEFAULT_CONNECTIVITY_STATUS = {
   }
 }
 
+export const MINIMAL_PROFILE = {
+  name: 'Student Workspace',
+  email: '',
+  role: 'Guest',
+  avatar: '/images/overview-profile.jpg'
+}
+
+export const MINIMAL_DASHBOARD_STATE = {
+  session: {
+    task: 'Set your first focus session',
+    remainingSeconds: 25 * 60,
+    isPaused: true
+  },
+  suggestion: {
+    text: 'Add assignments or connect Google Calendar to generate a personalized plan.',
+    visible: false,
+    acknowledgedAt: null
+  },
+  priorities: [
+    {
+      id: 'starter-priority-1',
+      title: 'Add your first assignment',
+      meta: 'Assessments workspace',
+      impact: 65,
+      urgency: 48,
+      completed: false
+    },
+    {
+      id: 'starter-priority-2',
+      title: 'Connect Google Calendar',
+      meta: 'Settings > Connectivity',
+      impact: 60,
+      urgency: 40,
+      completed: false
+    },
+    {
+      id: 'starter-priority-3',
+      title: 'Ask Donna to propose today’s block',
+      meta: 'Use the Donna widget',
+      impact: 58,
+      urgency: 38,
+      completed: false
+    }
+  ],
+  timeline: [
+    {
+      id: 'starter-timeline-1',
+      time: '09:00 AM',
+      title: 'No fixed events yet',
+      detail: 'Connect calendar to sync your schedule.',
+      status: ''
+    },
+    {
+      id: 'starter-timeline-2',
+      time: '12:00 PM',
+      title: 'Build your first study plan',
+      detail: 'Add priorities in the dashboard.',
+      status: ''
+    },
+    {
+      id: 'starter-timeline-3',
+      time: '05:00 PM',
+      title: 'Propose a study block',
+      detail: 'Donna will draft it for your approval.',
+      status: ''
+    }
+  ],
+  focusAssignments: {
+    title: 'No active focus assignment yet',
+    due: 'Add assignments to prioritize',
+    note: 'Donna will surface risk and readiness after you add real coursework.'
+  },
+  metrics: {
+    contextSwitches: 0,
+    replanCount: 0,
+    optimizeCount: 0,
+    acknowledgeCount: 0
+  },
+  ai: {
+    lastRoute: 'local',
+    lastConfidence: 0.5,
+    lastReason: 'Starter workspace created.'
+  },
+  focus: {
+    score: 68,
+    reason: 'Starter mode active. Score will adapt once real tasks and sessions are added.'
+  }
+}
+
+export const MINIMAL_CHAT_MESSAGES = [
+  {
+    id: 'm-starter-welcome',
+    role: 'assistant',
+    text: 'Welcome to Donna. Add an assignment or connect your calendar, then I can propose a focused study block.',
+    ts: Date.now()
+  }
+]
+
+export const MINIMAL_ASPIRATIONS = [
+  {
+    id: 'asp-starter',
+    title: 'Define your first aspiration',
+    subtext: 'Add a concrete academic objective and log progress sessions over time.',
+    status: 'active',
+    progress: 0,
+    targetLabel: 'No target set',
+    startedAt: Date.now(),
+    lastWorkedAt: null,
+    workSessionCount: 0,
+    createdAt: Date.now(),
+    completedAt: null
+  }
+]
+
+export const MINIMAL_CALENDAR_EVENTS = []
+
+export const MINIMAL_ASSIGNMENTS = [
+  {
+    id: 'as-starter-1',
+    title: 'Add your first assignment',
+    course: 'Starter',
+    dueAt: `${toDateKey(addDays(new Date(), 2))}T20:00:00`,
+    estimatedHours: 1,
+    priority: 'Medium'
+  }
+]
+
+export const MINIMAL_EXAMS = []
+export const MINIMAL_EXAM_STUDY_SESSIONS = []
+export const MINIMAL_ASPIRATION_SESSIONS = []
+export const MINIMAL_INSIGHT_DESK = []
+
+export function getModeDefaults(mode = 'demo') {
+  if (mode === 'demo') {
+    return {
+      profile: DEFAULT_PROFILE,
+      onboardingCompleted: true,
+      dashboard: DEFAULT_DASHBOARD_STATE,
+      chat: DEFAULT_CHAT_MESSAGES,
+      focusHistory: [],
+      apiKey: '',
+      aspirations: DEFAULT_ASPIRATIONS,
+      aspirationsArchive: [],
+      aspirationSessions: DEFAULT_ASPIRATION_SESSIONS,
+      settings: DEFAULT_SETTINGS_STATE,
+      insightDesk: DEFAULT_INSIGHT_DESK,
+      connectivityStatus: DEFAULT_CONNECTIVITY_STATUS,
+      calendarEvents: DEFAULT_CALENDAR_EVENTS,
+      assignments: DEFAULT_ASSIGNMENTS,
+      exams: DEFAULT_EXAMS,
+      examStudySessions: DEFAULT_EXAM_STUDY_SESSIONS
+    }
+  }
+
+  return {
+    profile: MINIMAL_PROFILE,
+    onboardingCompleted: false,
+    dashboard: MINIMAL_DASHBOARD_STATE,
+    chat: MINIMAL_CHAT_MESSAGES,
+    focusHistory: [],
+    apiKey: '',
+    aspirations: MINIMAL_ASPIRATIONS,
+    aspirationsArchive: [],
+    aspirationSessions: MINIMAL_ASPIRATION_SESSIONS,
+    settings: DEFAULT_SETTINGS_STATE,
+    insightDesk: MINIMAL_INSIGHT_DESK,
+    connectivityStatus: DEFAULT_CONNECTIVITY_STATUS,
+    calendarEvents: MINIMAL_CALENDAR_EVENTS,
+    assignments: MINIMAL_ASSIGNMENTS,
+    exams: MINIMAL_EXAMS,
+    examStudySessions: MINIMAL_EXAM_STUDY_SESSIONS
+  }
+}
+
 export function safeParse(value, fallback) {
   if (!value) return fallback
   try {
@@ -598,8 +773,8 @@ export function buildPlannerRequest(state, userMessage) {
   }
 }
 
-export function chooseModelRoute({ message, state, hasApiKey }) {
-  if (!hasApiKey) {
+export function chooseModelRoute({ message, state, hasApiKey, hasServerPlanner = true }) {
+  if (!hasApiKey && !hasServerPlanner) {
     return { route: 'local', reason: 'No BYOK key present.' }
   }
 
@@ -652,71 +827,6 @@ export function runLocalPlanner(state, message, source = 'chat') {
     suggestion,
     priorityOrder: priorities.map((item) => item.title),
     timelineUpdates
-  }
-}
-
-function extractJson(content) {
-  if (!content) return null
-  const trimmed = content.trim()
-
-  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-    return safeParse(trimmed, null)
-  }
-
-  const start = trimmed.indexOf('{')
-  const end = trimmed.lastIndexOf('}')
-  if (start >= 0 && end > start) {
-    return safeParse(trimmed.slice(start, end + 1), null)
-  }
-
-  return null
-}
-
-export async function runOpenAIPlanner({ apiKey, request, route, source }) {
-  const model = route === 'strong' ? 'gpt-4.1' : 'gpt-4.1-mini'
-  const systemPrompt =
-    'You are Donna AI planner. Return JSON only with keys: assistantMessage, confidence (0..1), suggestion, priorityOrder (array of priority titles), timelineUpdates (array of {time,title,detail,status}), reason.'
-
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model,
-      temperature: 0.3,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        {
-          role: 'user',
-          content: `Planning source: ${source}\n${JSON.stringify(request)}`
-        }
-      ]
-    })
-  })
-
-  if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`OpenAI error ${response.status}: ${text.slice(0, 180)}`)
-  }
-
-  const json = await response.json()
-  const content = json?.choices?.[0]?.message?.content ?? ''
-  const parsed = extractJson(content)
-
-  if (!parsed) {
-    throw new Error('Planner response was not valid JSON.')
-  }
-
-  return {
-    route,
-    confidence: typeof parsed.confidence === 'number' ? parsed.confidence : route === 'strong' ? 0.83 : 0.72,
-    reason: parsed.reason || `OpenAI ${model} planner`,
-    assistantMessage: parsed.assistantMessage || 'I optimized the plan and updated your dashboard.',
-    suggestion: parsed.suggestion,
-    priorityOrder: parsed.priorityOrder,
-    timelineUpdates: parsed.timelineUpdates
   }
 }
 

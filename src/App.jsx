@@ -4,6 +4,8 @@ import AppLayout from './layouts/AppLayout'
 import PublicLayout from './layouts/PublicLayout'
 
 const LandingScreen = lazy(() => import('./screens/LandingScreen'))
+const LoginScreen = lazy(() => import('./screens/LoginScreen'))
+const OnboardingScreen = lazy(() => import('./screens/OnboardingScreen'))
 const AssignmentsScreen = lazy(() => import('./screens/AssignmentsScreen'))
 const CalendarScreen = lazy(() => import('./screens/CalendarScreen'))
 const GoalsScreen = lazy(() => import('./screens/GoalsScreen'))
@@ -20,9 +22,11 @@ function App() {
       <Routes>
         <Route element={<PublicLayout />}>
           <Route path="/" element={<LandingScreen />} />
+          <Route path="/login" element={<LoginScreen />} />
         </Route>
 
         <Route element={<AppLayout />}>
+          <Route path="/onboarding" element={<OnboardingScreen />} />
           <Route path="/dashboard" element={<OverviewScreen />} />
           <Route path="/overview" element={<Navigate to="/dashboard" replace />} />
           <Route path="/today" element={<Navigate to="/dashboard" replace />} />

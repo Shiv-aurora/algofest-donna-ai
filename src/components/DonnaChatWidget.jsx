@@ -13,7 +13,10 @@ function DonnaChatWidget() {
     setChatOpen,
     sending,
     authConnectivity,
+    plannerUsage,
+    plannerUsageLoading,
     hasApiKey,
+    refreshPlannerUsage,
     runPlanner,
     donnaActions,
     donnaActionsLoading,
@@ -52,8 +55,23 @@ function DonnaChatWidget() {
   useEffect(() => {
     if (chatOpen) {
       fetchDonnaActions({ silent: true })
+      refreshPlannerUsage({ silent: true })
     }
-  }, [chatOpen, fetchDonnaActions])
+  }, [chatOpen, fetchDonnaActions, refreshPlannerUsage])
+
+  const quotaText = useMemo(() => {
+    if (plannerUsageLoading) return 'Loading quota...'
+    if (!plannerUsage?.usage || !plannerUsage?.limits || !plannerUsage?.remaining) return ''
+    if (plannerUsage?.eligibility?.requiresByok && !hasApiKey) {
+      return 'Free cloud quota unavailable for this session. Add API key to enable cloud responses.'
+    }
+
+    const dailyLeft = Math.max(0, Number(plannerUsage.remaining.userDailyMessages || 0))
+    const dailyTotal = Math.max(0, Number(plannerUsage.limits.userDailyMessages || 0))
+    const weeklyLeft = Math.max(0, Number(plannerUsage.remaining.userWeeklyTokens || 0)).toLocaleString()
+    const weeklyTotal = Math.max(0, Number(plannerUsage.limits.userWeeklyTokens || 0)).toLocaleString()
+    return `Free quota: ${dailyLeft}/${dailyTotal} msgs today · ${weeklyLeft}/${weeklyTotal} tokens this week`
+  }, [hasApiKey, plannerUsage, plannerUsageLoading])
 
   const toLocalTimeRange = (action) => {
     const start = action?.payload?.start ? new Date(action.payload.start) : null
@@ -148,6 +166,7 @@ function DonnaChatWidget() {
               <div>
                 <p className="text-sm font-medium text-on-surface">Donna</p>
                 <p className="text-[10px] tracking-wide uppercase text-on-surface-variant">{statusText}</p>
+                {quotaText && <p className="text-[10px] text-on-surface-variant/80 mt-0.5">{quotaText}</p>}
               </div>
             </div>
             <div className="flex items-center gap-2">
