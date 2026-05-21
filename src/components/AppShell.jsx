@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
-import { createRoot } from 'react-dom/client'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useDashboard } from '../state/DashboardProvider'
 import DashboardClockAi from './ui/dashboard-clock-ai'
@@ -16,12 +16,13 @@ const ROUTE_CLASSES = {
 function AppShell({ activeRoute, html }) {
   const containerRef = useRef(null)
   const mountedHtmlRef = useRef('')
-  const aiClockMountRef = useRef(null)
   const runPlannerRef = useRef(() => {})
+  const [aiClockSlot, setAiClockSlot] = useState(null)
   const navigate = useNavigate()
   const location = useLocation()
   const {
     dashboard,
+    proposeStudyBlockAction,
     profile,
     accountMenuOpen,
     setAccountMenuOpen,
@@ -40,57 +41,23 @@ function AppShell({ activeRoute, html }) {
     runPlannerRef.current = runPlanner
   }, [runPlanner])
 
-  const renderAiClock = useCallback(() => {
-    if (!aiClockMountRef.current) return
-    aiClockMountRef.current.render(
-      <DashboardClockAi
-        isLoading={sending}
-        onAskDonna={(message) => {
-          const text = String(message || '').trim()
-          if (!text) return
-          runPlannerRef.current(text, 'replan')
-        }}
-      />
-    )
-  }, [sending])
-
-  useLayoutEffect(() => {
+  useEffect(() => {
     const root = containerRef.current
-    if (!root) return
-
-    if (aiClockMountRef.current) {
-      aiClockMountRef.current.unmount()
-      aiClockMountRef.current = null
-    }
+    if (!root) return undefined
 
     if (mountedHtmlRef.current !== html) {
       root.innerHTML = html
       mountedHtmlRef.current = html
     }
 
-    if (activeRoute === 'dashboard') {
-      const aiClockSlot = root.querySelector('[data-ai-clock-slot]')
-      if (aiClockSlot) {
-        const mountedRoot = createRoot(aiClockSlot)
-        aiClockMountRef.current = mountedRoot
-        renderAiClock()
-      }
-    }
-  }, [activeRoute, html, renderAiClock])
+    const nextAiClockSlot =
+      activeRoute === 'dashboard' ? root.querySelector('[data-ai-clock-slot]') : null
+    const frame = window.requestAnimationFrame(() => {
+      setAiClockSlot((current) => (current === nextAiClockSlot ? current : nextAiClockSlot))
+    })
 
-  useEffect(() => {
-    if (activeRoute !== 'dashboard') return
-    renderAiClock()
-  }, [activeRoute, renderAiClock])
-
-  useEffect(() => {
-    return () => {
-      if (aiClockMountRef.current) {
-        aiClockMountRef.current.unmount()
-        aiClockMountRef.current = null
-      }
-    }
-  }, [])
+    return () => window.cancelAnimationFrame(frame)
+  }, [activeRoute, html])
 
   useEffect(() => {
     const root = containerRef.current
@@ -202,8 +169,8 @@ function AppShell({ activeRoute, html }) {
 
     const routeForLabel = (labelText) => {
       if (labelText.includes('dashboard') || labelText.includes('overview') || labelText.includes('today')) return '/dashboard'
-      if (labelText.includes('assignment') || labelText.includes('tasks')) return '/assignments'
-      if (labelText.includes('calendar') || labelText.includes('plan')) return '/calendar'
+      if (labelText.includes('assessment') || labelText.includes('assignment') || labelText.includes('tasks')) return '/assignments'
+      if (labelText.includes('calendar') || labelText.includes('plan')) return '/assignments'
       if (labelText.includes('goal')) return '/goals'
       if (labelText.includes('setting')) return '/settings'
       return null
@@ -295,6 +262,30 @@ function AppShell({ activeRoute, html }) {
       if (action === 'optimize-priorities') {
         setChatOpen(true)
         await runPlanner('Optimize this plan for today', 'optimize')
+        const now = new Date()
+        const start = new Date(now)
+        start.setHours(20, 0, 0, 0)
+        if (start.getTime() <= now.getTime()) {
+          start.setDate(start.getDate() + 1)
+        }
+        const end = new Date(start)
+        end.setMinutes(end.getMinutes() + 60)
+        const focusTitle = String(dashboard.focusAssignments?.title || 'Priority Study Block').trim()
+        const proposalResult = await proposeStudyBlockAction({
+          title: `Study Block: ${focusTitle}`,
+          start: start.toISOString(),
+          end: end.toISOString(),
+          description: 'Donna-generated study block from dashboard optimization flow.',
+          metadata: { trigger: 'dashboard_optimize' }
+        })
+        if (proposalResult?.ok && proposalResult?.action?.status === 'proposed') {
+          showToast('Study block proposed. Review in Donna chat.')
+          return
+        }
+        if (!proposalResult?.ok) {
+          showToast(proposalResult?.message || 'Study block suggestion unavailable')
+          return
+        }
         showToast('Plan optimized with Donna')
         return
       }
@@ -340,6 +331,7 @@ function AppShell({ activeRoute, html }) {
     }
   }, [
     activeRoute,
+    dashboard,
     html,
     location.pathname,
     navigate,
@@ -348,12 +340,28 @@ function AppShell({ activeRoute, html }) {
     setAccountMenuOpen,
     setApiKeyEditorOpen,
     setChatOpen,
+    proposeStudyBlockAction,
     runPlanner,
     resetLocalData
   ])
 
   return (
-    <div ref={containerRef} className={className} data-active-route={activeRoute} />
+    <>
+      <div ref={containerRef} className={className} data-active-route={activeRoute} />
+      {activeRoute === 'dashboard' &&
+        aiClockSlot &&
+        createPortal(
+          <DashboardClockAi
+            isLoading={sending}
+            onAskDonna={(message) => {
+              const text = String(message || '').trim()
+              if (!text) return
+              runPlannerRef.current(text, 'replan')
+            }}
+          />,
+          aiClockSlot
+        )}
+    </>
   )
 }
 
