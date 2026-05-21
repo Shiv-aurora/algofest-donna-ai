@@ -65,8 +65,8 @@ const TRUST_ITEMS = [
   'Approval is required for provider-backed writes.',
   'Action lifecycle is visible: proposed, approved, executed, failed.',
   'Calendar connectivity state is explicit across the app.',
-  'Fallback planning works even when provider is unavailable.',
-  'No fake success path: failures are surfaced with concise reasons.'
+  'Read-only planning remains available when provider execution is unavailable.',
+  'Execution failures are surfaced with concise, machine-readable reasons.'
 ]
 
 function SectionKicker({ children }) {
@@ -130,7 +130,7 @@ export function LandingHeroSection() {
 
             <div className="space-y-3 p-5">
               <div className="rounded-xl bg-[#eaeff1] p-3 text-[14px] leading-relaxed text-[#1A1C1E]">
-                Three deadlines this week. I can place a 90-minute study block before your 3:00 PM seminar. Approve?
+                I found open time before your afternoon seminar. I can place a focused study block there for approval.
               </div>
 
               <div className="space-y-2">
@@ -213,7 +213,7 @@ export function LandingFeaturesSection() {
             <SectionKicker>Capabilities</SectionKicker>
             <h2 className="font-headline text-[clamp(34px,4vw,54px)] font-bold tracking-[-0.03em]">Built for execution.</h2>
           </div>
-          <p className="max-w-md text-[16px] text-[#44474E]">These are the actual behaviors in the product today, not mock controls.</p>
+          <p className="max-w-md text-[16px] text-[#44474E]">These behaviors map to current Donna routes, provider state, and action APIs.</p>
         </div>
 
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -247,17 +247,17 @@ export function LandingHowSection() {
           <div className="rounded-xl border border-[#C4C7CF] bg-white p-5">
             <div className="text-[11px] uppercase tracking-[0.2em] text-[#74777F]">Step 1</div>
             <h3 className="mt-2 text-xl font-semibold">Connect</h3>
-            <p className="mt-2 text-sm text-[#44474E]">Connect Google Calendar and keep provider status visible in app settings.</p>
+            <p className="mt-2 text-sm text-[#44474E]">Connect Google Calendar and monitor provider readiness from settings.</p>
           </div>
           <div className="rounded-xl border border-[#C4C7CF] bg-white p-5">
             <div className="text-[11px] uppercase tracking-[0.2em] text-[#74777F]">Step 2</div>
             <h3 className="mt-2 text-xl font-semibold">Propose</h3>
-            <p className="mt-2 text-sm text-[#44474E]">Donna fetches context and proposes study blocks with structured payloads.</p>
+            <p className="mt-2 text-sm text-[#44474E]">Donna reads calendar context and proposes structured study-block actions.</p>
           </div>
           <div className="rounded-xl border border-[#C4C7CF] bg-white p-5">
             <div className="text-[11px] uppercase tracking-[0.2em] text-[#74777F]">Step 3</div>
             <h3 className="mt-2 text-xl font-semibold">Approve</h3>
-            <p className="mt-2 text-sm text-[#44474E]">Approving executes creation and records status transitions in action history.</p>
+            <p className="mt-2 text-sm text-[#44474E]">Approval executes creation and records status transitions in action history.</p>
           </div>
         </div>
       </div>
@@ -274,7 +274,7 @@ export function LandingPreviewSection() {
             <SectionKicker>Product</SectionKicker>
             <h2 className="font-headline text-[clamp(34px,4vw,54px)] font-bold tracking-[-0.03em]">A workspace built around doing the work.</h2>
           </div>
-          <p className="max-w-md text-[16px] text-[#44474E]">Overview, assignments, calendar workspace, aspirations, and settings are all accessible in one app shell.</p>
+          <p className="max-w-md text-[16px] text-[#44474E]">Overview, merged planning workspace, aspirations, and settings are available in one app shell.</p>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1.45fr_1fr]" data-reveal>
@@ -295,7 +295,7 @@ export function LandingPreviewSection() {
 
             <div className="rounded-xl border border-[#C4C7CF] bg-white p-4">
               <div className="text-[11px] uppercase tracking-[0.2em] text-[#74777F]">Proposed</div>
-              <p className="mt-1 text-sm text-[#1A1C1E]">CHEM 142 study block • 7:00 PM - 8:30 PM</p>
+              <p className="mt-1 text-sm text-[#1A1C1E]">Example: CHEM 142 study block • 7:00 PM - 8:30 PM</p>
             </div>
             <div className="rounded-xl border border-[#C4C7CF] bg-white p-4">
               <div className="text-[11px] uppercase tracking-[0.2em] text-[#74777F]">Execution</div>
@@ -354,14 +354,14 @@ export function LandingFinalCtaSection() {
   return (
     <section id="cta" className="landing-page__final relative overflow-hidden px-8 py-28 text-center text-white md:px-16" data-reveal>
       <div className="mx-auto max-w-4xl">
-        <SectionKicker>Free for students</SectionKicker>
+        <SectionKicker>Built for students</SectionKicker>
         <h2 className="font-headline text-[clamp(40px,5vw,66px)] font-bold tracking-[-0.03em]">
-          Stop planning at midnight.
+          Plan with clarity.
           <br />
-          Start tomorrow finished.
+          Execute with approval.
         </h2>
         <p className="mx-auto mt-5 max-w-2xl text-[17px] text-white/75">
-          Open the app, review the proposed day, and approve the study blocks that should hit your calendar.
+          Open the app, review proposed blocks, and approve only the actions you want executed.
         </p>
         <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
           <Link to={LANDING_ROUTES.app} className="landing-page__btn-primary">

@@ -38,7 +38,7 @@ function LandingFooter() {
               Donna
             </Link>
             <p className="max-w-sm text-[12px] uppercase tracking-[0.18em] text-black/45">
-              Academic planning agent for execution-grade student workflows.
+              Academic planning agent for assignment, calendar, and approval-based study workflows.
             </p>
             <Link to={LANDING_ROUTES.app} className="landing-page__btn-primary landing-page__btn-primary--sm inline-flex">
               Enter dashboard
