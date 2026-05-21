@@ -75,3 +75,13 @@ h3 {
   background: rgba(115, 124, 127, 0.1);
   border-radius: 10px;
 }
+
+[data-active-route='dashboard'] aside[class*='bg-slate-100/30'],
+[data-active-route='today'] aside[class*='bg-slate-100/30'],
+[data-active-route='assignments'] aside[class*='bg-slate-100/30'],
+[data-active-route='calendar'] aside[class*='bg-slate-100/30'],
+[data-active-route='goals'] aside[class*='bg-slate-100/30'],
+[data-active-route='settings'] aside[class*='bg-slate-100/30'] {
+  background-color: rgba(248, 249, 250, 0.58) !important;
+  border-right-color: rgba(171, 179, 183, 0.2) !important;
+}
