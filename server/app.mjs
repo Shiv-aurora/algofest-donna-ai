@@ -4,12 +4,17 @@ import express from 'express'
 import helmet from 'helmet'
 
 import { createActionStore } from './actions/action-store.mjs'
+import { createAlgoClient } from './algo/algo-client.mjs'
+import { createV2Router } from './algo/v2-router.mjs'
 import { createUsageLimitStore } from './actions/usage-limit-store.mjs'
 import { requireAuth } from './auth/middleware.mjs'
 import { createSessionMiddleware } from './auth/session.mjs'
+import { createPostgresStore } from './db/postgres.mjs'
 import { createGoogleCalendarService } from './google/google-calendar-service.mjs'
 import { createGoogleOAuthService } from './google/google-oauth-service.mjs'
 import { createGroqService } from './groq/groq-service.mjs'
+import { createOllamaService } from './llm/ollama-service.mjs'
+import { createLmsSyncService } from './lms/lms-sync-service.mjs'
 import { createCsrfProtection, ensureCsrfToken } from './lib/csrf.mjs'
 import { loadEnv } from './lib/env.mjs'
 import { HttpError, toErrorResponse } from './lib/http.mjs'
@@ -24,10 +29,14 @@ const observability = createObservability({
 
 const googleOAuth = createGoogleOAuthService(config)
 const groqService = createGroqService(config)
+const ollamaService = createOllamaService(config)
 const calendarService = createGoogleCalendarService()
-const actionStore = createActionStore(config.files.actionStoreFile)
-const usageLimitStore = createUsageLimitStore(config.files.usageStoreFile)
+const lmsSyncService = createLmsSyncService({ observability })
+const postgresStore = await createPostgresStore(config, observability)
+const actionStore = createActionStore(config.files.actionStoreFile, postgresStore)
+const usageLimitStore = createUsageLimitStore(config.files.usageStoreFile, postgresStore)
 const authGuard = requireAuth(config)
+const algoClient = createAlgoClient(config)
 const GOOGLE_IDENTITY_SCOPES = ['openid', 'email', 'profile']
 
 if (config.trustProxy) {
@@ -66,6 +75,18 @@ app.use(express.json({ limit: '100kb' }))
 const { middleware: sessionMiddleware } = await createSessionMiddleware(config)
 app.use(sessionMiddleware)
 app.use(createCsrfProtection(config))
+app.use(
+  '/api/v2',
+  createV2Router({
+    config,
+    observability,
+    authGuard,
+    groqService,
+    ollamaService,
+    algoClient,
+    postgresStore
+  })
+)
 
 const providerStore = new Map()
 const demoCalendarEventStore = new Map()
@@ -78,7 +99,13 @@ function createDefaultProviders() {
       lastSyncAt: null,
       status: 'idle',
       errorMessage: '',
-      institutionDomain: ''
+      institutionDomain: '',
+      mode: 'ics_link',
+      sourceUrl: '',
+      courseHint: '',
+      importedTasks: 0,
+      importedEvents: 0,
+      lastError: ''
     },
     blackboard: {
       provider: 'blackboard',
@@ -86,7 +113,13 @@ function createDefaultProviders() {
       lastSyncAt: null,
       status: 'idle',
       errorMessage: '',
-      institutionDomain: ''
+      institutionDomain: '',
+      mode: 'ics_link',
+      sourceUrl: '',
+      courseHint: '',
+      importedTasks: 0,
+      importedEvents: 0,
+      lastError: ''
     },
     googleCalendar: {
       provider: 'googleCalendar',
@@ -266,7 +299,7 @@ function hashIp(ip) {
     .digest('hex')
 }
 
-function getPlannerUsageSnapshot(req) {
+async function getPlannerUsageSnapshot(req) {
   const userId = getUserId(req)
   const ipHash = hashIp(getClientIp(req))
   if (!userId) return null
@@ -285,6 +318,7 @@ function plannerEligibility(req) {
     mode,
     freeTierEligible,
     serverGroqConfigured,
+    ollamaConfigured: Boolean(config.ollama?.baseUrl),
     requiresByok: !serverGroqConfigured || !freeTierEligible
   }
 }
@@ -730,6 +764,132 @@ app.get('/api/connectivity/providers', async (req, res, next) => {
   }
 })
 
+app.post('/api/connectivity/lms/connect', authGuard, async (req, res, next) => {
+  try {
+    const body = validate(schemas.lmsConnectBody, req.body || {}, 'invalid_lms_connect_request')
+    const userId = getUserId(req)
+    const providers = getProvidersForUser(userId)
+    const result = await lmsSyncService.connect({
+      userId,
+      provider: body.provider,
+      mode: body.mode,
+      sourceUrl: body.sourceUrl,
+      courseHint: body.courseHint || '',
+      testOnly: Boolean(body.testOnly)
+    })
+
+    if (body.testOnly) {
+      return res.json({
+        ok: true,
+        message: 'LMS link validated.',
+        provider: result.provider
+      })
+    }
+
+    updateProvider(providers, body.provider, {
+      connected: true,
+      status: 'idle',
+      errorMessage: '',
+      mode: result.provider.mode,
+      sourceUrl: result.provider.sourceUrl,
+      courseHint: result.provider.courseHint || '',
+      lastError: ''
+    })
+
+    return res.json({
+      ok: true,
+      provider: providers[body.provider]
+    })
+  } catch (error) {
+    observability.logError('connectivity.lms.connect.failed', req, error)
+    next(error)
+  }
+})
+
+app.post('/api/connectivity/lms/sync', authGuard, async (req, res, next) => {
+  try {
+    const body = validate(schemas.lmsSyncBody, req.body || {}, 'invalid_lms_sync_request')
+    const userId = getUserId(req)
+    const providers = getProvidersForUser(userId)
+    const result = await lmsSyncService.sync({
+      userId,
+      provider: body.provider,
+      force: Boolean(body.force)
+    })
+
+    updateProvider(providers, body.provider, {
+      connected: true,
+      status: 'idle',
+      errorMessage: '',
+      lastSyncAt: new Date().toISOString(),
+      importedTasks: result.tasks.length,
+      importedEvents: result.events.length,
+      lastError: ''
+    })
+
+    return res.json({
+      ok: true,
+      provider: providers[body.provider],
+      syncResult: {
+        ok: true,
+        imported: result.imported,
+        updated: result.updated,
+        removed: result.removed,
+        skipped: result.skipped,
+        warnings: result.warnings
+      },
+      tasks: result.tasks,
+      events: result.events,
+      conflicts: result.conflicts,
+      routeDecision: { route: 'trivial', tokenUsage: 0, reason: 'manual_lms_sync' },
+      scheduler: { reoptimizeTriggered: true }
+    })
+  } catch (error) {
+    observability.logError('connectivity.lms.sync.failed', req, error)
+    next(error)
+  }
+})
+
+app.get('/api/connectivity/lms/status', authGuard, async (req, res, next) => {
+  try {
+    const query = validate(schemas.lmsStatusQuery, req.query || {}, 'invalid_lms_status_query')
+    const userId = getUserId(req)
+    const status = lmsSyncService.getStatus(userId)
+    if (query.provider) {
+      return res.json({ ok: true, provider: status[query.provider] })
+    }
+    return res.json({ ok: true, providers: status })
+  } catch (error) {
+    observability.logError('connectivity.lms.status.failed', req, error)
+    next(error)
+  }
+})
+
+app.delete('/api/connectivity/lms/connect', authGuard, async (req, res, next) => {
+  try {
+    const body = validate(schemas.lmsSyncBody, req.body || {}, 'invalid_lms_disconnect_request')
+    const userId = getUserId(req)
+    const providers = getProvidersForUser(userId)
+    const result = lmsSyncService.disconnect({ userId, provider: body.provider })
+    updateProvider(providers, body.provider, {
+      connected: false,
+      status: 'idle',
+      errorMessage: '',
+      lastSyncAt: null,
+      mode: 'ics_link',
+      sourceUrl: '',
+      courseHint: '',
+      importedTasks: 0,
+      importedEvents: 0,
+      lastError: ''
+    })
+    return res.json({ ok: true, provider: { ...providers[body.provider], ...result.provider } })
+  } catch (error) {
+    observability.logError('connectivity.lms.disconnect.failed', req, error)
+    next(error)
+  }
+})
+
 if (process.env.NODE_ENV !== 'production') {
   app.get('/api/debug/session', (req, res) => {
     const authStateCode = getAuthStateCode(req)
@@ -1111,44 +1271,51 @@ app.get('/api/donna/calendar/context', authGuard, async (req, res, next) => {
   }
 })
 
-app.get('/api/donna/planner/usage', authGuard, (req, res) => {
-  const usage = getPlannerUsageSnapshot(req)
-  const eligibility = plannerEligibility(req)
-  res.json({
-    ok: true,
-    eligibility,
-    limits: usage?.limits || {
-      ipHourlyRequests: config.limits.freeIpHourlyLimit,
-      userDailyMessages: config.limits.freeUserDailyMessages,
-      userWeeklyTokens: config.limits.freeUserWeeklyTokens
-    },
-    usage: usage?.usage || {
-      ipHourlyRequests: 0,
-      userDailyMessages: 0,
-      userWeeklyTokens: 0
-    },
-    remaining: usage?.remaining || {
-      ipHourlyRequests: config.limits.freeIpHourlyLimit,
-      userDailyMessages: config.limits.freeUserDailyMessages,
-      userWeeklyTokens: config.limits.freeUserWeeklyTokens
-    },
-    resetsAt: usage?.resetsAt || {
-      ipHourly: null,
-      userDailyMessages: null,
-      userWeeklyTokens: null
-    }
-  })
+app.get('/api/donna/planner/usage', authGuard, async (req, res) => {
+  try {
+    const usage = await getPlannerUsageSnapshot(req)
+    const eligibility = plannerEligibility(req)
+    res.json({
+      ok: true,
+      eligibility,
+      limits: usage?.limits || {
+        ipHourlyRequests: config.limits.freeIpHourlyLimit,
+        userDailyMessages: config.limits.freeUserDailyMessages,
+        userWeeklyTokens: config.limits.freeUserWeeklyTokens
+      },
+      usage: usage?.usage || {
+        ipHourlyRequests: 0,
+        userDailyMessages: 0,
+        userWeeklyTokens: 0
+      },
+      remaining: usage?.remaining || {
+        ipHourlyRequests: config.limits.freeIpHourlyLimit,
+        userDailyMessages: config.limits.freeUserDailyMessages,
+        userWeeklyTokens: config.limits.freeUserWeeklyTokens
+      },
+      resetsAt: usage?.resetsAt || {
+        ipHourly: null,
+        userDailyMessages: null,
+        userWeeklyTokens: null
+      }
+    })
+  } catch (error) {
+    observability.logError('donna.planner.usage.failed', req, error)
+    res.status(503).json({ ok: false, reasonCode: 'usage_unavailable' })
+  }
 })
 
 app.post('/api/donna/planner', authGuard, async (req, res) => {
   const validated = validate(schemas.plannerBody, req.body || {}, 'invalid_planner_request')
   const route = validated.route === 'strong' ? 'strong' : 'small'
   const source = String(validated.source || 'chat')
+  const providerMode = validated.providerMode === 'local_ollama' ? 'local_ollama' : 'groq'
+  const localModel = String(validated.localModel || '').trim()
   const requestPayload = validated.request && typeof validated.request === 'object' ? validated.request : req.body || {}
   const byokKey = String(validated.apiKey || req.get('x-user-api-key') || '').trim()
   const userId = getUserId(req)
   const ipHash = hashIp(getClientIp(req))
-  const usageBefore = getPlannerUsageSnapshot(req)
+  const usageBefore = await getPlannerUsageSnapshot(req)
   const eligibility = plannerEligibility(req)
 
   const deny = (status, reasonCode, message, byokRequired = true) => {
@@ -1163,9 +1330,9 @@ app.post('/api/donna/planner', authGuard, async (req, res) => {
     })
   }
 
-  const useFreeTier = !byokKey
-
-  if (useFreeTier) {
+  const ensureGroqAllowed = () => {
+    const useFreeTier = !byokKey
+    if (!useFreeTier) return null
     if (!eligibility.freeTierEligible) {
       return deny(
         403,
@@ -1182,7 +1349,6 @@ app.post('/api/donna/planner', authGuard, async (req, res) => {
         true
       )
     }
-
     if (usageBefore.usage.ipHourlyRequests >= usageBefore.limits.ipHourlyRequests) {
       observability.incrementCounter('donna_quota_exceeded_total', { reasonCode: 'quota_exceeded_hourly_ip' })
       return deny(
@@ -1192,7 +1358,6 @@ app.post('/api/donna/planner', authGuard, async (req, res) => {
         true
       )
     }
-
     if (usageBefore.usage.userDailyMessages >= usageBefore.limits.userDailyMessages) {
       observability.incrementCounter('donna_quota_exceeded_total', { reasonCode: 'quota_exceeded_daily_user' })
       return deny(
@@ -1202,7 +1367,6 @@ app.post('/api/donna/planner', authGuard, async (req, res) => {
         true
       )
     }
-
     if (usageBefore.usage.userWeeklyTokens >= usageBefore.limits.userWeeklyTokens) {
       observability.incrementCounter('donna_quota_exceeded_total', { reasonCode: 'quota_exceeded_weekly_tokens' })
       return deny(
@@ -1212,24 +1376,56 @@ app.post('/api/donna/planner', authGuard, async (req, res) => {
         true
       )
     }
+    return null
   }
 
   try {
-    const plannerResult = await groqService.plan({
-      apiKeyOverride: byokKey,
-      request: requestPayload,
-      route,
-      source
-    })
-
+    let plannerResult = null
+    let providerUsed = 'groq'
+    let fallback = false
+    let fallbackReason = ''
+    let billingMode = 'free'
     let usage = usageBefore
-    if (useFreeTier) {
-      usageLimitStore.recordFreeUsage({
-        userId,
-        ipHash,
-        tokens: Number(plannerResult?.usage?.totalTokens || 0)
+
+    if (providerMode === 'local_ollama') {
+      try {
+        plannerResult = await ollamaService.plan({
+          request: requestPayload,
+          route,
+          source,
+          localModel
+        })
+        providerUsed = 'local_ollama'
+        billingMode = 'local'
+        observability.incrementCounter('donna_local_provider_success_total', { provider: 'local_ollama' })
+      } catch (error) {
+        fallback = true
+        fallbackReason = 'local_ollama_unavailable'
+        observability.incrementCounter('donna_local_provider_fallback_total', { reasonCode: fallbackReason })
+      }
+    }
+
+    if (!plannerResult) {
+      const denyResponse = ensureGroqAllowed()
+      if (denyResponse) return denyResponse
+
+      plannerResult = await groqService.plan({
+        apiKeyOverride: byokKey,
+        request: requestPayload,
+        route,
+        source
       })
-      usage = getPlannerUsageSnapshot(req)
+      providerUsed = 'groq'
+      const useFreeTier = !byokKey
+      billingMode = useFreeTier ? 'free' : 'byok'
+      if (useFreeTier) {
+        await usageLimitStore.recordFreeUsage({
+          userId,
+          ipHash,
+          tokens: Number(plannerResult?.usage?.totalTokens || 0)
+        })
+        usage = await getPlannerUsageSnapshot(req)
+      }
     }
 
     return res.json({
@@ -1237,7 +1433,10 @@ app.post('/api/donna/planner', authGuard, async (req, res) => {
       ...plannerResult,
       usage,
       eligibility,
-      billingMode: useFreeTier ? 'free' : 'byok'
+      billingMode,
+      providerUsed,
+      fallback,
+      fallbackReason: fallback ? fallbackReason : undefined
     })
   } catch (error) {
     const reasonCode = String(error?.details?.reasonCode || 'provider_error')
@@ -1249,13 +1448,13 @@ app.post('/api/donna/planner', authGuard, async (req, res) => {
       reasonCode,
       message: String(error?.message || 'Cloud planner request failed.'),
       byokRequired: reasonCode === 'byok_required' || useFreeTier,
-      usage: getPlannerUsageSnapshot(req),
+      usage: await getPlannerUsageSnapshot(req),
       eligibility
     })
   }
 })
 
-app.post('/api/donna/actions/propose-study-block', authGuard, (req, res, next) => {
+app.post('/api/donna/actions/propose-study-block', authGuard, async (req, res, next) => {
   try {
     const body = validate(schemas.proposeStudyBlockBody, req.body || {}, 'invalid_study_block_request')
     const title = String(body.title || 'Study Block').trim() || 'Study Block'
@@ -1290,7 +1489,7 @@ app.post('/api/donna/actions/propose-study-block', authGuard, (req, res, next) =
       }
     }
 
-    const action = actionStore.createProposedAction(getUserId(req), 'create_study_block', payload)
+    const action = await actionStore.createProposedAction(getUserId(req), 'create_study_block', payload)
 
     logAudit('donna.action.proposed', {
       req,
@@ -1306,15 +1505,15 @@ app.post('/api/donna/actions/propose-study-block', authGuard, (req, res, next) =
   }
 })
 
-app.get('/api/donna/actions', authGuard, (req, res) => {
-  const actions = actionStore.listByUser(getUserId(req))
+app.get('/api/donna/actions', authGuard, async (req, res) => {
+  const actions = await actionStore.listByUser(getUserId(req))
   res.json({ actions })
 })
 
 app.post('/api/donna/actions/:id/approve', authGuard, async (req, res, next) => {
   try {
     validate(schemas.approveActionParam, req.params, 'invalid_action_id')
-    const action = actionStore.getById(req.params.id)
+    const action = await actionStore.getById(req.params.id)
     const userId = getUserId(req)
     if (!isGoogleCalendarConnected(req)) {
       throw new HttpError('Provider is not connected.', 400, { reasonCode: 'connect_provider_required' })
@@ -1330,7 +1529,7 @@ app.post('/api/donna/actions/:id/approve', authGuard, async (req, res, next) => 
       })
     }
 
-    actionStore.markApproved(action.id)
+    await actionStore.markApproved(action.id)
 
     try {
       let createdEvent
@@ -1370,7 +1569,7 @@ app.post('/api/donna/actions/:id/approve', authGuard, async (req, res, next) => 
         })
       }
 
-      const executed = actionStore.markExecuted(action.id, {
+      const executed = await actionStore.markExecuted(action.id, {
         googleEventId: createdEvent.id,
         htmlLink: createdEvent.htmlLink,
         start: createdEvent.start,
@@ -1394,7 +1593,7 @@ app.post('/api/donna/actions/:id/approve', authGuard, async (req, res, next) => 
 
       return res.json({ action: executed })
     } catch (executeError) {
-      const failed = actionStore.markFailed(
+      const failed = await actionStore.markFailed(
         action.id,
         executeError,
         'Approved action failed during Google Calendar execution.'
@@ -1426,5 +1625,37 @@ app.use((error, req, res, _next) => {
   const normalized = toErrorResponse(error)
   res.status(normalized.status).json(normalized.body)
 })
+
+const LMS_BACKGROUND_SYNC_MS = 30 * 60 * 1000
+setInterval(async () => {
+  const connected = lmsSyncService.listConnected()
+  if (!connected.length) return
+  for (const row of connected) {
+    try {
+      const result = await lmsSyncService.sync({
+        userId: row.userId,
+        provider: row.provider,
+        force: false
+      })
+      const providers = getProvidersForUser(row.userId)
+      updateProvider(providers, row.provider, {
+        connected: true,
+        status: 'idle',
+        errorMessage: '',
+        lastSyncAt: new Date().toISOString(),
+        importedTasks: result.tasks.length,
+        importedEvents: result.events.length,
+        lastError: ''
+      })
+    } catch (error) {
+      const providers = getProvidersForUser(row.userId)
+      updateProvider(providers, row.provider, {
+        status: 'error',
+        errorMessage: String(error?.code || error?.message || 'sync_failed'),
+        lastError: String(error?.code || error?.message || 'sync_failed')
+      })
+    }
+  }
+}, LMS_BACKGROUND_SYNC_MS)
 
 export { app, config, observability }

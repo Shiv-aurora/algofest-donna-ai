@@ -1,6 +1,3 @@
-import fs from 'node:fs'
-import path from 'node:path'
-
 const HOUR_MS = 60 * 60 * 1000
 const DAY_MS = 24 * HOUR_MS
 const WEEK_MS = 7 * DAY_MS
@@ -19,8 +16,58 @@ function ensureArray(value) {
   return Array.isArray(value) ? value : []
 }
 
-export function createUsageLimitStore(filePath) {
-  const resolvedPath = path.resolve(filePath)
+function computeSnapshotFromEvents({ userEvents, ipEvents, limits, now = Date.now() }) {
+  const dayCutoff = now - DAY_MS
+  const weekCutoff = now - WEEK_MS
+  const hourCutoff = now - HOUR_MS
+
+  const safeUserEvents = ensureArray(userEvents)
+    .map((item) => ({
+      at: toNumber(item?.at, 0),
+      tokens: Math.max(0, toNumber(item?.tokens, 0))
+    }))
+    .filter((item) => item.at >= weekCutoff)
+    .sort((a, b) => a.at - b.at)
+  const safeIpEvents = ensureArray(ipEvents)
+    .map((ts) => toNumber(ts, 0))
+    .filter((ts) => ts >= hourCutoff)
+    .sort((a, b) => a - b)
+
+  const dailyEvents = safeUserEvents.filter((item) => item.at >= dayCutoff)
+  const weeklyTokens = safeUserEvents.reduce((sum, item) => sum + Math.max(0, item.tokens), 0)
+  const hourlyEvents = safeIpEvents.filter((ts) => ts >= hourCutoff)
+
+  const userDailyResetTs = dailyEvents.length > 0 ? dailyEvents[0].at + DAY_MS : null
+  const userWeeklyResetTs = safeUserEvents.length > 0 ? safeUserEvents[0].at + WEEK_MS : null
+  const ipHourlyResetTs = hourlyEvents.length > 0 ? hourlyEvents[0] + HOUR_MS : null
+
+  return {
+    limits: {
+      ipHourlyRequests: limits.freeIpHourlyLimit,
+      userDailyMessages: limits.freeUserDailyMessages,
+      userWeeklyTokens: limits.freeUserWeeklyTokens
+    },
+    usage: {
+      ipHourlyRequests: hourlyEvents.length,
+      userDailyMessages: dailyEvents.length,
+      userWeeklyTokens: weeklyTokens
+    },
+    remaining: {
+      ipHourlyRequests: Math.max(0, limits.freeIpHourlyLimit - hourlyEvents.length),
+      userDailyMessages: Math.max(0, limits.freeUserDailyMessages - dailyEvents.length),
+      userWeeklyTokens: Math.max(0, limits.freeUserWeeklyTokens - weeklyTokens)
+    },
+    resetsAt: {
+      ipHourly: toIsoOrNull(ipHourlyResetTs),
+      userDailyMessages: toIsoOrNull(userDailyResetTs),
+      userWeeklyTokens: toIsoOrNull(userWeeklyResetTs)
+    }
+  }
+}
+
+export function createUsageLimitStore(filePath, postgresStore = null) {
+  const usePostgres = Boolean(postgresStore?.enabled)
+  void filePath
   let persistenceEnabled = true
   let state = {
     userEvents: {},
@@ -33,24 +80,12 @@ export function createUsageLimitStore(filePath) {
 
   function ensureDir() {
     if (!persistenceEnabled) return
-    fs.mkdirSync(path.dirname(resolvedPath), { recursive: true })
   }
 
   function load() {
-    try {
-      if (fs.existsSync(resolvedPath)) {
-        const raw = fs.readFileSync(resolvedPath, 'utf8')
-        const parsed = JSON.parse(raw)
-        state = {
-          userEvents: parsed?.userEvents && typeof parsed.userEvents === 'object' ? parsed.userEvents : {},
-          ipEvents: parsed?.ipEvents && typeof parsed.ipEvents === 'object' ? parsed.ipEvents : {}
-        }
-      }
-    } catch {
-      state = {
-        userEvents: {},
-        ipEvents: {}
-      }
+    state = {
+      userEvents: {},
+      ipEvents: {}
     }
   }
 
@@ -58,14 +93,11 @@ export function createUsageLimitStore(filePath) {
     if (!persistenceEnabled) return
     try {
       ensureDir()
-      fs.writeFileSync(resolvedPath, JSON.stringify(state, null, 2), 'utf8')
     } catch (error) {
       const code = String(error?.code || '')
       if (code === 'EROFS' || code === 'EACCES' || code === 'EPERM') {
         disablePersistence()
-        return
       }
-      throw error
     }
   }
 
@@ -97,57 +129,17 @@ export function createUsageLimitStore(filePath) {
     }
   }
 
-  function computeSnapshot({ userId, ipHash, limits, now = Date.now() }) {
+  function computeSnapshotFromFile({ userId, ipHash, limits, now = Date.now() }) {
     prune(now)
-    const dayCutoff = now - DAY_MS
-    const weekCutoff = now - WEEK_MS
-    const hourCutoff = now - HOUR_MS
-
-    const userEvents = ensureArray(state.userEvents[userId])
-      .map((item) => ({
-        at: toNumber(item?.at, 0),
-        tokens: Math.max(0, toNumber(item?.tokens, 0))
-      }))
-      .filter((item) => item.at >= weekCutoff)
-      .sort((a, b) => a.at - b.at)
-
-    const ipEvents = ensureArray(state.ipEvents[ipHash])
-      .map((ts) => toNumber(ts, 0))
-      .filter((ts) => ts >= hourCutoff)
-      .sort((a, b) => a - b)
-
-    const dailyEvents = userEvents.filter((item) => item.at >= dayCutoff)
-    const weeklyTokens = userEvents.reduce((sum, item) => sum + Math.max(0, item.tokens), 0)
-
-    const userDailyResetTs = dailyEvents.length > 0 ? dailyEvents[0].at + DAY_MS : null
-    const userWeeklyResetTs = userEvents.length > 0 ? userEvents[0].at + WEEK_MS : null
-    const ipHourlyResetTs = ipEvents.length > 0 ? ipEvents[0] + HOUR_MS : null
-
-    return {
-      limits: {
-        ipHourlyRequests: limits.freeIpHourlyLimit,
-        userDailyMessages: limits.freeUserDailyMessages,
-        userWeeklyTokens: limits.freeUserWeeklyTokens
-      },
-      usage: {
-        ipHourlyRequests: ipEvents.length,
-        userDailyMessages: dailyEvents.length,
-        userWeeklyTokens: weeklyTokens
-      },
-      remaining: {
-        ipHourlyRequests: Math.max(0, limits.freeIpHourlyLimit - ipEvents.length),
-        userDailyMessages: Math.max(0, limits.freeUserDailyMessages - dailyEvents.length),
-        userWeeklyTokens: Math.max(0, limits.freeUserWeeklyTokens - weeklyTokens)
-      },
-      resetsAt: {
-        ipHourly: toIsoOrNull(ipHourlyResetTs),
-        userDailyMessages: toIsoOrNull(userDailyResetTs),
-        userWeeklyTokens: toIsoOrNull(userWeeklyResetTs)
-      }
-    }
+    return computeSnapshotFromEvents({
+      userEvents: state.userEvents[userId] || [],
+      ipEvents: state.ipEvents[ipHash] || [],
+      limits,
+      now
+    })
   }
 
-  function recordFreeUsage({ userId, ipHash, tokens = 0, at = Date.now() }) {
+  function recordFreeUsageFile({ userId, ipHash, tokens = 0, at = Date.now() }) {
     const safeTs = toNumber(at, Date.now())
     const safeTokens = Math.max(0, toNumber(tokens, 0))
 
@@ -163,10 +155,54 @@ export function createUsageLimitStore(filePath) {
     persist()
   }
 
-  load()
+  async function getUsageSnapshotDb({ userId, ipHash, limits, now = Date.now() }) {
+    const hourAgo = new Date(now - HOUR_MS).toISOString()
+    const weekAgo = new Date(now - WEEK_MS).toISOString()
+
+    const [userRows, ipRows] = await Promise.all([
+      postgresStore.query(
+        `SELECT created_at, tokens FROM usage_events
+         WHERE user_id = $1 AND created_at >= $2
+         ORDER BY created_at ASC`,
+        [userId, weekAgo]
+      ),
+      postgresStore.query(
+        `SELECT created_at FROM usage_events
+         WHERE ip_hash = $1 AND created_at >= $2
+         ORDER BY created_at ASC`,
+        [ipHash, hourAgo]
+      )
+    ])
+
+    const userEvents = userRows.rows.map((row) => ({
+      at: new Date(row.created_at).getTime(),
+      tokens: toNumber(row.tokens, 0)
+    }))
+    const ipEvents = ipRows.rows.map((row) => new Date(row.created_at).getTime())
+    return computeSnapshotFromEvents({ userEvents, ipEvents, limits, now })
+  }
+
+  async function recordFreeUsageDb({ userId, ipHash, tokens = 0, at = Date.now() }) {
+    const createdAt = new Date(toNumber(at, Date.now())).toISOString()
+    await postgresStore.query(
+      `INSERT INTO usage_events (user_id, ip_hash, tokens, created_at)
+       VALUES ($1, $2, $3, $4)`,
+      [userId, ipHash, Math.max(0, toNumber(tokens, 0)), createdAt]
+    )
+  }
+
+  if (!usePostgres) {
+    load()
+  }
 
   return {
-    getUsageSnapshot: computeSnapshot,
-    recordFreeUsage
+    async getUsageSnapshot(payload) {
+      if (usePostgres) return getUsageSnapshotDb(payload)
+      return computeSnapshotFromFile(payload)
+    },
+    async recordFreeUsage(payload) {
+      if (usePostgres) return recordFreeUsageDb(payload)
+      return recordFreeUsageFile(payload)
+    }
   }
 }
