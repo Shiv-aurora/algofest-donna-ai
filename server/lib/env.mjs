@@ -79,6 +79,32 @@ function validateConfig(config) {
     errors.push('FREE_GROQ_USER_WEEKLY_TOKENS must be greater than 0.')
   }
 
+  if (config.algo?.baseUrl) {
+    try {
+      const algo = new URL(config.algo.baseUrl)
+      if (!['http:', 'https:'].includes(algo.protocol)) {
+        errors.push('ALGO_SERVICE_BASE_URL must use http or https.')
+      }
+    } catch {
+      errors.push('ALGO_SERVICE_BASE_URL must be a valid absolute URL.')
+    }
+  }
+
+  if (config.ollama?.baseUrl) {
+    try {
+      const ollama = new URL(config.ollama.baseUrl)
+      if (!['http:', 'https:'].includes(ollama.protocol)) {
+        errors.push('OLLAMA_BASE_URL must use http or https.')
+      }
+    } catch {
+      errors.push('OLLAMA_BASE_URL must be a valid absolute URL.')
+    }
+  }
+
+  if (!Number.isFinite(config.ollama?.timeoutMs) || config.ollama.timeoutMs <= 0) {
+    errors.push('OLLAMA_TIMEOUT_MS must be greater than 0.')
+  }
+
   if (errors.length > 0) {
     throw new Error(`Invalid server configuration:\n- ${errors.join('\n- ')}`)
   }
@@ -110,6 +136,12 @@ export function loadEnv() {
 
   const groqModel = String(process.env.GROQ_MODEL || 'llama-3.1-8b-instant').trim()
   const groqStrongModel = String(process.env.GROQ_STRONG_MODEL || groqModel).trim()
+  const ollamaBaseUrl = String(process.env.OLLAMA_BASE_URL || 'http://localhost:11434').trim()
+  const ollamaModel = String(process.env.OLLAMA_MODEL || 'gemma3:4b').trim()
+  const ollamaTimeoutMs = parseNumber(process.env.OLLAMA_TIMEOUT_MS, 12000)
+  const algoBaseUrl = String(process.env.ALGO_SERVICE_BASE_URL || 'http://localhost:8090').trim()
+  const algoTimeoutMs = parseNumber(process.env.ALGO_SERVICE_TIMEOUT_MS, 1500)
+  const postgresUrl = String(process.env.POSTGRES_URL || '').trim()
 
   const config = {
     nodeEnv,
@@ -129,6 +161,18 @@ export function loadEnv() {
       apiKey: String(process.env.GROQ_API_KEY || '').trim(),
       model: groqModel,
       strongModel: groqStrongModel
+    },
+    ollama: {
+      baseUrl: ollamaBaseUrl,
+      model: ollamaModel,
+      timeoutMs: ollamaTimeoutMs
+    },
+    algo: {
+      baseUrl: algoBaseUrl,
+      timeoutMs: algoTimeoutMs
+    },
+    postgres: {
+      url: postgresUrl
     },
     limits: {
       freeIpHourlyLimit,

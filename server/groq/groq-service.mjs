@@ -1,3 +1,4 @@
+import { PROMPTS } from '../algo/prompts.mjs'
 import { fetchJson, HttpError } from '../lib/http.mjs'
 
 const GROQ_CHAT_COMPLETIONS_URL = 'https://api.groq.com/openai/v1/chat/completions'
@@ -39,7 +40,7 @@ export function createGroqService(config) {
     return Boolean(config.groq?.apiKey)
   }
 
-  async function plan({ apiKeyOverride = '', request, route = 'small', source = 'chat' }) {
+  async function callJson({ apiKeyOverride = '', modelRoute = 'small', systemPrompt, userPayload }) {
     const effectiveKey = String(apiKeyOverride || '').trim() || config.groq.apiKey
     if (!effectiveKey) {
       throw new HttpError('Cloud planner key is missing. Add your API key to continue.', 400, {
@@ -47,9 +48,7 @@ export function createGroqService(config) {
       })
     }
 
-    const model = route === 'strong' ? config.groq.strongModel : config.groq.model
-    const systemPrompt =
-      'You are Donna AI planner. Return JSON only with keys: assistantMessage, confidence (0..1), suggestion, priorityOrder (array of priority titles), timelineUpdates (array of {time,title,detail,status}), reason.'
+    const model = modelRoute === 'strong' ? config.groq.strongModel : config.groq.model
 
     const response = await fetchJson(GROQ_CHAT_COMPLETIONS_URL, {
       method: 'POST',
@@ -59,10 +58,10 @@ export function createGroqService(config) {
       },
       body: JSON.stringify({
         model,
-        temperature: 0.3,
+        temperature: 0.2,
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Planning source: ${source}\n${JSON.stringify(request)}` }
+          { role: 'user', content: JSON.stringify(userPayload) }
         ]
       })
     })
@@ -70,18 +69,12 @@ export function createGroqService(config) {
     const content = response?.choices?.[0]?.message?.content ?? ''
     const parsed = extractJson(content)
     if (!parsed) {
-      throw new HttpError('Planner response was not valid JSON.', 502, { reasonCode: 'provider_error' })
+      throw new HttpError('LLM response was not valid JSON.', 502, { reasonCode: 'provider_error' })
     }
 
     return {
-      route,
-      assistantMessage: parsed.assistantMessage || 'I optimized the plan and updated your dashboard.',
-      confidence:
-        typeof parsed.confidence === 'number' ? parsed.confidence : route === 'strong' ? 0.82 : 0.7,
-      suggestion: parsed.suggestion,
-      priorityOrder: parsed.priorityOrder,
-      timelineUpdates: parsed.timelineUpdates,
-      reason: parsed.reason || `Groq ${model} planner`,
+      data: parsed,
+      model,
       usage: {
         promptTokens: toNumber(response?.usage?.prompt_tokens, 0),
         completionTokens: toNumber(response?.usage?.completion_tokens, 0),
@@ -90,8 +83,90 @@ export function createGroqService(config) {
     }
   }
 
+  async function plan({ apiKeyOverride = '', request, route = 'small', source = 'chat' }) {
+    const result = await callJson({
+      apiKeyOverride,
+      modelRoute: route,
+      systemPrompt:
+        'You are Donna AI planner. Return JSON only with keys: assistantMessage, confidence (0..1), suggestion, priorityOrder (array of priority titles), timelineUpdates (array of {time,title,detail,status}), reason.',
+      userPayload: {
+        source,
+        request
+      }
+    })
+
+    const parsed = result.data
+    return {
+      route,
+      assistantMessage: parsed.assistantMessage || 'I optimized the plan and updated your dashboard.',
+      confidence: typeof parsed.confidence === 'number' ? parsed.confidence : route === 'strong' ? 0.82 : 0.7,
+      suggestion: parsed.suggestion,
+      priorityOrder: parsed.priorityOrder,
+      timelineUpdates: parsed.timelineUpdates,
+      reason: parsed.reason || `Groq ${result.model} planner`,
+      usage: result.usage
+    }
+  }
+
+  async function parseIntent({ apiKeyOverride = '', message, context = {}, route = 'small' }) {
+    const result = await callJson({
+      apiKeyOverride,
+      modelRoute: route,
+      systemPrompt: PROMPTS.intent,
+      userPayload: {
+        message,
+        context
+      }
+    })
+
+    return {
+      ...result.data,
+      route,
+      usage: result.usage
+    }
+  }
+
+  async function explainSchedule({ apiKeyOverride = '', route = 'small', intent = {}, schedule = {} }) {
+    const result = await callJson({
+      apiKeyOverride,
+      modelRoute: route,
+      systemPrompt: PROMPTS.explanation,
+      userPayload: {
+        intent,
+        schedule
+      }
+    })
+
+    return {
+      ...result.data,
+      route,
+      usage: result.usage
+    }
+  }
+
+  async function extractSyllabusCandidates({ apiKeyOverride = '', syllabusText = '', route = 'small', context = {} }) {
+    const result = await callJson({
+      apiKeyOverride,
+      modelRoute: route,
+      systemPrompt: PROMPTS.syllabus,
+      userPayload: {
+        syllabus_text: syllabusText,
+        context
+      }
+    })
+
+    return {
+      candidates: Array.isArray(result.data?.candidates) ? result.data.candidates : [],
+      route,
+      usage: result.usage
+    }
+  }
+
   return {
     isConfigured,
-    plan
+    plan,
+    parseIntent,
+    explainSchedule,
+    extractSyllabusCandidates
   }
 }
