@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_USER: donna
+      POSTGRES_PASSWORD: donna
+      POSTGRES_DB: donna
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  algo:
+    build:
+      context: ./algo-service
+      dockerfile: Dockerfile
+    ports:
+      - "8090:8090"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    depends_on:
+      - postgres
+      - redis
+      - algo
+    environment:
+      NODE_ENV: development
+      CONNECTIVITY_PORT: 8787
+      FRONTEND_ORIGIN: http://localhost:5173
+      SERVER_BASE_URL: http://localhost:8787
+      SESSION_SECRET: donna-dev-session-secret-please-change-1234567890
+      REDIS_URL: redis://redis:6379
+      POSTGRES_URL: postgresql://donna:donna@postgres:5432/donna
+      ALGO_SERVICE_BASE_URL: http://algo:8090
+      ALGO_SERVICE_TIMEOUT_MS: 1800
+      GROQ_MODEL: llama-3.1-8b-instant
+    ports:
+      - "8787:8787"
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    depends_on:
+      - redis
+      - postgres
+    environment:
+      REDIS_URL: redis://redis:6379
+      RETRAIN_QUEUE_KEY: donna:retrain:jobs
+    command: ["node", "server/workers/retrain-worker.mjs"]
+
+  telegram:
+    profiles: ["telegram"]
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    depends_on:
+      - algo
+    environment:
+      ALGO_SERVICE_BASE_URL: http://algo:8090
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+    command: ["node", "server/telegram/bot.mjs"]
+
+volumes:
+  postgres_data:
