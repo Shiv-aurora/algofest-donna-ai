@@ -22,18 +22,26 @@ import {
   runLocalPlanner
 } from './dashboardEngine'
 import {
+  benchmarkMetricsV2,
   ConnectivityApiError,
   approveDonnaAction,
+  connectLmsApi,
   connectProviderApi,
+  disconnectLmsApi,
   disconnectProviderApi,
+  feasibilityPlanV2,
   fetchProviders,
   getAuthMe,
   getDonnaCalendarContext,
   getDonnaPlannerUsage,
   listDonnaActions,
+  logWorkEventV2,
   logoutAuth,
+  notifyDecisionV2,
   proposeStudyBlock,
   runDonnaPlannerApi,
+  solvePlanV2,
+  syncLmsApi,
   syncProviderApi
 } from './connectivityApi'
 
@@ -117,7 +125,11 @@ function normalizeCalendarEvent(item, index = 0) {
     date: String(raw.date || fallback?.date || ''),
     startTime: String(raw.startTime || fallback?.startTime || '09:00'),
     endTime: String(raw.endTime || fallback?.endTime || '10:00'),
-    kind: String(raw.kind || fallback?.kind || 'class')
+    kind: String(raw.kind || fallback?.kind || 'class'),
+    source: String(raw.source || 'manual'),
+    source_of_truth: String(raw.source_of_truth || ''),
+    subtype: String(raw.subtype || ''),
+    fingerprint: String(raw.fingerprint || '')
   }
 }
 
@@ -132,7 +144,11 @@ function normalizeAssignment(item, index = 0) {
     course: String(raw.course || fallback?.course || 'Course'),
     dueAt: String(raw.dueAt || fallback?.dueAt || new Date().toISOString()),
     estimatedHours: Number.isFinite(estimated) ? estimated : Number(fallback?.estimatedHours || 1),
-    priority: String(raw.priority || fallback?.priority || 'Medium')
+    priority: String(raw.priority || fallback?.priority || 'Medium'),
+    source: String(raw.source || 'manual'),
+    source_of_truth: String(raw.source_of_truth || ''),
+    subtype: String(raw.subtype || ''),
+    fingerprint: String(raw.fingerprint || '')
   }
 }
 
@@ -509,31 +525,10 @@ function deriveProfileFromAuthUser(authUser, mode, currentProfile) {
   return next
 }
 
-function isGreetingOnlyMessage(text) {
-  const normalized = String(text || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^\w\s]/g, '')
-    .replace(/\s+/g, ' ')
-  if (!normalized) return false
-  const greetings = new Set([
-    'hi',
-    'hey',
-    'hello',
-    'yo',
-    'sup',
-    'hii',
-    'heyy',
-    'hiya',
-    'good morning',
-    'good afternoon',
-    'good evening'
-  ])
-  return greetings.has(normalized)
-}
-
 export function DashboardProvider({ children }) {
   const apiKeyRef = useRef('')
+  const providerModeRef = useRef('groq')
+  const localModelRef = useRef('')
 
   const hydrated = useMemo(() => getModeDefaults('guest'), [])
 
@@ -543,6 +538,8 @@ export function DashboardProvider({ children }) {
   const [chatMessages, setChatMessages] = useState(hydrated.chat || DEFAULT_CHAT_MESSAGES)
   const [focusHistory, setFocusHistory] = useState(hydrated.focusHistory || [])
   const [apiKey, setApiKey] = useState(hydrated.apiKey || '')
+  const [providerMode, setProviderMode] = useState(hydrated.providerMode || 'groq')
+  const [localModel, setLocalModel] = useState(hydrated.localModel || '')
   const [chatOpen, setChatOpen] = useState(false)
   const [sending, setSending] = useState(false)
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
@@ -585,6 +582,18 @@ export function DashboardProvider({ children }) {
   })
   const [plannerUsage, setPlannerUsage] = useState(null)
   const [plannerUsageLoading, setPlannerUsageLoading] = useState(false)
+  const [v2PlannerMeta, setV2PlannerMeta] = useState({
+    route: 'local',
+    latencyMs: 0,
+    fallback: false,
+    providerUsed: 'local_deterministic',
+    fallbackReason: ''
+  })
+  const [v2Feasibility, setV2Feasibility] = useState(null)
+  const [v2Forecast, setV2Forecast] = useState([])
+  const [v2EstimateBands, setV2EstimateBands] = useState([])
+  const [v2Benchmarks, setV2Benchmarks] = useState(null)
+  const [v2LastRequest, setV2LastRequest] = useState(null)
   const [calendarEvents, setCalendarEvents] = useState(() =>
     (hydrated.calendarEvents || DEFAULT_CALENDAR_EVENTS).map((item, index) =>
       normalizeCalendarEvent(item, index)
@@ -601,6 +610,16 @@ export function DashboardProvider({ children }) {
       normalizeSession(item, index, 'exam')
     )
   )
+  const buildFocusContext = useCallback(
+    (historyOverride = null) => ({
+      assignments,
+      exams,
+      calendarEvents,
+      focusHistory: Array.isArray(historyOverride) ? historyOverride : focusHistory
+    }),
+    [assignments, exams, calendarEvents, focusHistory]
+  )
+
   const heuristicSignalRef = useRef({
     deadline: '',
     inactivity: '',
@@ -616,6 +635,12 @@ export function DashboardProvider({ children }) {
     setDonnaActionExecution({ inFlight: false, actionId: '', lastResult: null })
     setPlannerUsage(null)
     setPlannerUsageLoading(false)
+    setV2PlannerMeta({ route: 'local', latencyMs: 0, fallback: false, providerUsed: 'local_deterministic', fallbackReason: '' })
+    setV2Feasibility(null)
+    setV2Forecast([])
+    setV2EstimateBands([])
+    setV2Benchmarks(null)
+    setV2LastRequest(null)
   }, [])
 
   const applyHydratedState = useCallback((nextState, mode = 'guest') => {
@@ -629,6 +654,8 @@ export function DashboardProvider({ children }) {
     setChatMessages(Array.isArray(source.chat) && source.chat.length > 0 ? source.chat : fallback.chat)
     setFocusHistory(Array.isArray(source.focusHistory) ? source.focusHistory : fallback.focusHistory)
     setApiKey(String(source.apiKey || ''))
+    setProviderMode(String(source.providerMode || 'groq') === 'local_ollama' ? 'local_ollama' : 'groq')
+    setLocalModel(String(source.localModel || ''))
     setAspirations((source.aspirations || fallback.aspirations).map((item, index) => normalizeAspiration(item, index)))
     setAspirationsArchive((source.aspirationsArchive || []).map((item, index) => normalizeAspiration(item, index)))
     setAspirationSessions((source.aspirationSessions || fallback.aspirationSessions).map((item, index) =>
@@ -659,6 +686,8 @@ export function DashboardProvider({ children }) {
       chatRaw: readScopedStorage(STORAGE_KEYS.chat, scope),
       focusHistoryRaw: readScopedStorage(STORAGE_KEYS.focusHistory, scope),
       apiKeyRaw: readScopedSessionStorage(STORAGE_KEYS.apiKey, scope) || readScopedStorage(STORAGE_KEYS.apiKey, scope),
+      providerModeRaw: readScopedStorage(STORAGE_KEYS.providerMode, scope),
+      localModelRaw: readScopedStorage(STORAGE_KEYS.localModel, scope),
       aspirationsRaw: readScopedStorage(STORAGE_KEYS.aspirations, scope),
       aspirationsArchiveRaw: readScopedStorage(STORAGE_KEYS.aspirationsArchive, scope),
       aspirationSessionsRaw: readScopedStorage(STORAGE_KEYS.aspirationSessions, scope),
@@ -763,6 +792,18 @@ export function DashboardProvider({ children }) {
   }, [apiKey, storageScope])
 
   useEffect(() => {
+    providerModeRef.current = providerMode === 'local_ollama' ? 'local_ollama' : 'groq'
+    if (!storageScope) return
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.providerMode, storageScope), JSON.stringify(providerModeRef.current))
+  }, [providerMode, storageScope])
+
+  useEffect(() => {
+    localModelRef.current = String(localModel || '').trim()
+    if (!storageScope) return
+    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.localModel, storageScope), JSON.stringify(localModelRef.current))
+  }, [localModel, storageScope])
+
+  useEffect(() => {
     if (!storageScope) return
     localStorage.setItem(scopedStorageKey(STORAGE_KEYS.profile, storageScope), JSON.stringify(profile))
   }, [profile, storageScope])
@@ -863,7 +904,7 @@ export function DashboardProvider({ children }) {
         }
 
         if (next.session.remainingSeconds % 60 === 0) {
-          const scored = recomputeFocusState(next)
+          const scored = recomputeFocusState(next, '', buildFocusContext())
           setFocusHistory((history) => [...history.slice(-49), { ts: Date.now(), score: scored.focus.score }])
           return scored
         }
@@ -873,7 +914,7 @@ export function DashboardProvider({ children }) {
     }, 1000)
 
     return () => window.clearInterval(interval)
-  }, [])
+  }, [buildFocusContext])
 
   const refreshAuthConnectivity = useCallback(async ({ silent = false } = {}) => {
     setAuthConnectivityRefreshing(true)
@@ -1126,7 +1167,7 @@ export function DashboardProvider({ children }) {
 
   const applyResult = (result, source = 'chat') => {
     setDashboard((prev) => {
-      const next = applyPlannerResult(prev, result, source)
+      const next = recomputeFocusState(applyPlannerResult(prev, result, source), '', buildFocusContext())
       setFocusHistory((history) => [...history.slice(-49), { ts: Date.now(), score: next.focus.score }])
       return next
     })
@@ -1153,7 +1194,8 @@ export function DashboardProvider({ children }) {
             acknowledgeCount: prev.metrics.acknowledgeCount + 1
           }
         },
-        'Suggestion acknowledged; cognitive load reduced.'
+        'Suggestion acknowledged; cognitive load reduced.',
+        buildFocusContext()
       )
     )
     pushAssistantMessage('Suggestion acknowledged. I will surface the next recommendation in chat only.', 'local')
@@ -1171,7 +1213,8 @@ export function DashboardProvider({ children }) {
         },
         prev.session.isPaused
           ? 'Session resumed; momentum restored.'
-          : 'Session paused; focus trend temporarily reduced.'
+          : 'Session paused; focus trend temporarily reduced.',
+        buildFocusContext()
       )
     )
   }
@@ -1184,7 +1227,7 @@ export function DashboardProvider({ children }) {
           item.id === priorityId ? { ...item, completed: !item.completed } : item
         )
       }
-      return recomputeFocusState(next)
+      return recomputeFocusState(next, '', buildFocusContext())
     })
   }
 
@@ -1202,7 +1245,7 @@ export function DashboardProvider({ children }) {
         if (!ordered.find((entry) => entry.id === item.id)) ordered.push(item)
       }
 
-      return recomputeFocusState({ ...prev, priorities: ordered })
+      return recomputeFocusState({ ...prev, priorities: ordered }, '', buildFocusContext())
     })
   }
 
@@ -1395,13 +1438,26 @@ export function DashboardProvider({ children }) {
     }))
 
     try {
-      const response = await connectProviderApi(provider, payload)
+      const response =
+        provider === 'canvas' || provider === 'blackboard'
+          ? await connectLmsApi({
+              provider,
+              mode: String(payload.mode || 'ics_link'),
+              sourceUrl: String(payload.sourceUrl || ''),
+              courseHint: String(payload.courseHint || ''),
+              testOnly: Boolean(payload.testOnly)
+            })
+          : await connectProviderApi(provider, payload)
       if (response?.redirectUrl) {
         window.location.assign(response.redirectUrl)
         return true
       }
       if (response?.provider) {
         setConnectivityStatus((prev) => ({ ...prev, [key]: { ...prev[key], ...response.provider } }))
+      }
+      if (payload?.testOnly) {
+        pushInsight('donna', 'LMS link validated', `${key} feed URL is reachable and valid.`, 'success')
+        return true
       }
       await refreshAuthConnectivity({ silent: true })
       pushInsight('donna', 'Provider connected', `${key} is now connected.`, 'success')
@@ -1439,7 +1495,10 @@ export function DashboardProvider({ children }) {
   const disconnectProvider = async (provider) => {
     const key = provider === 'google_calendar' ? 'googleCalendar' : provider
     try {
-      const response = await disconnectProviderApi(provider)
+      const response =
+        provider === 'canvas' || provider === 'blackboard'
+          ? await disconnectLmsApi(provider)
+          : await disconnectProviderApi(provider)
       if (response?.provider) {
         setConnectivityStatus((prev) => ({ ...prev, [key]: { ...prev[key], ...response.provider } }))
       } else {
@@ -1488,9 +1547,36 @@ export function DashboardProvider({ children }) {
     }))
 
     try {
-      const response = await syncProviderApi(provider)
+      const response =
+        provider === 'canvas' || provider === 'blackboard'
+          ? await syncLmsApi({ provider, force: false })
+          : await syncProviderApi(provider)
       if (response?.provider) {
         setConnectivityStatus((prev) => ({ ...prev, [key]: { ...prev[key], ...response.provider } }))
+      }
+      if (Array.isArray(response?.events) && response.events.length > 0) {
+        setCalendarEvents((prev) => {
+          const manual = prev.filter((item) => String(item.source || 'manual') === 'manual')
+          const synced = response.events.map((item, index) => normalizeCalendarEvent(item, index))
+          return [...synced, ...manual]
+        })
+      }
+      if (Array.isArray(response?.tasks) && response.tasks.length > 0) {
+        setAssignments((prev) => {
+          const manual = prev.filter((item) => String(item.source || 'manual') === 'manual')
+          const synced = response.tasks.map((item, index) => normalizeAssignment(item, index))
+          return [...synced, ...manual]
+        })
+      }
+      if (Array.isArray(response?.conflicts) && response.conflicts.length > 0) {
+        pushInsight(
+          'donna',
+          'LMS conflict review',
+          `${response.conflicts.length} LMS date conflicts found. Source of truth is LMS; review in planner.`,
+          'warning'
+        )
+      } else if (provider === 'canvas' || provider === 'blackboard') {
+        pushInsight('donna', 'Auto-synced from LMS', `${key} imported tasks/events and refreshed your plan context.`, 'success')
       }
       await refreshAuthConnectivity({ silent: true })
       pushInsight('donna', 'Sync complete', `${key} sync finished successfully.`, 'success')
@@ -1518,96 +1604,254 @@ export function DashboardProvider({ children }) {
     }
   }
 
+  const buildV2SolveRequestFromState = useCallback(() => {
+    const now = new Date()
+    const slots = []
+    for (let i = 0; i < 36; i += 1) {
+      const start = new Date(now.getTime() + i * 60 * 60 * 1000)
+      start.setMinutes(0, 0, 0)
+      const end = new Date(start.getTime() + 60 * 60 * 1000)
+      slots.push({
+        id: `slot-${i}`,
+        start: start.toISOString(),
+        end: end.toISOString(),
+        blocked: false
+      })
+    }
+
+    const tasks = assignments.slice(0, 12).map((assignment, index) => {
+      const due = new Date(assignment.dueAt).getTime()
+      const hoursToDue = Number.isFinite(due) ? Math.max(0, (due - Date.now()) / (1000 * 60 * 60)) : 72
+      const urgency = Math.max(0.2, Math.min(2, 24 / Math.max(8, hoursToDue)))
+      return {
+        id: String(assignment.id || `as-${index}`),
+        title: String(assignment.title || `Task ${index + 1}`),
+        task_type: String(assignment.priority || 'assignment').toLowerCase(),
+        course_id: String(assignment.course || 'general').toLowerCase().replace(/\s+/g, '-'),
+        deadline: assignment.dueAt ? new Date(assignment.dueAt).toISOString() : null,
+        p75_hours: Number(assignment.estimatedHours || 1),
+        urgency,
+        energy_profile: index < 2 ? 'deep' : 'assignment',
+        prereq_ids: []
+      }
+    })
+
+    return {
+      tasks,
+      slots,
+      blocked_slot_ids: [],
+      latency_budget_ms: 500,
+      preferences: {
+        no_saturday_work: false,
+        grace_hours: 1
+      }
+    }
+  }, [assignments])
+
+  const convertV2ResponseToPlannerResult = useCallback((v2Response, solveRequest, source = 'chat') => {
+    const solve = v2Response?.result || {}
+    const assignmentsV2 = Array.isArray(solve.assignments) ? solve.assignments : []
+    const taskMap = new Map((solveRequest?.tasks || []).map((task) => [task.id, task.title]))
+    const orderedUniqueTaskIds = []
+    for (const assignment of assignmentsV2) {
+      if (!orderedUniqueTaskIds.includes(assignment.task_id)) {
+        orderedUniqueTaskIds.push(assignment.task_id)
+      }
+    }
+
+    const priorityOrder = orderedUniqueTaskIds.map((taskId) => taskMap.get(taskId) || taskId)
+    const timelineUpdates = assignmentsV2.slice(0, 3).map((assignment) => {
+      const start = new Date(assignment.start)
+      const end = new Date(assignment.end)
+      return {
+        time: start.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+        title: taskMap.get(assignment.task_id) || assignment.task_id,
+        detail: `${start.toLocaleDateString()} · ${end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`,
+        status: 'Scheduled'
+      }
+    })
+
+    const explanationText = v2Response?.explanation?.assistantMessage
+    const fallback = Boolean(v2Response?.fallback)
+    const route = String(v2Response?.routeDecision?.route || 'standard')
+    const latencyMs = Number(v2Response?.latencyMs || solve.latency_ms || 0)
+
+    const assistantMessage =
+      explanationText ||
+      (assignmentsV2.length > 0
+        ? `I built a ${route} schedule with ${assignmentsV2.length} study blocks in ${Math.round(latencyMs)}ms.`
+        : `I evaluated your constraints in ${Math.round(latencyMs)}ms and did not find strong allocations.`)
+
+    const suggestion =
+      assignmentsV2.length > 0
+        ? `Start with ${(taskMap.get(assignmentsV2[0].task_id) || assignmentsV2[0].task_id).toLowerCase()} in the first scheduled block.`
+        : 'Add more availability slots to increase schedule feasibility.'
+
+    return {
+      route: fallback ? 'local' : route,
+      confidence: route === 'complex' ? 0.82 : route === 'standard' ? 0.75 : 0.68,
+      reason: fallback ? 'Algo sidecar unavailable; local fallback.' : `Donna v2 ${route} route`,
+      assistantMessage:
+        source === 'optimize' ? `${assistantMessage} I optimized this around your constraints.` : assistantMessage,
+      suggestion,
+      priorityOrder,
+      timelineUpdates
+    }
+  }, [])
+
+  const runFeasibilityQuery = useCallback(
+    async (queryText = 'Can I take Friday night off?') => {
+      if (!v2LastRequest) {
+        return { ok: false, reason: 'no_plan' }
+      }
+
+      const text = String(queryText || '').toLowerCase()
+      const blocked = []
+      for (const slot of v2LastRequest.slots || []) {
+        const start = new Date(slot.start)
+        if (Number.isNaN(start.getTime())) continue
+        const isFriday = start.getDay() === 5
+        const isEvening = start.getHours() >= 18 && start.getHours() <= 23
+        if (text.includes('friday') && text.includes('night') && isFriday && isEvening) {
+          blocked.push(slot.id)
+        }
+      }
+
+      try {
+        const result = await feasibilityPlanV2({
+          base: v2LastRequest,
+          extraBlockedSlotIds: blocked
+        })
+        setV2Feasibility(result?.result || null)
+        return { ok: true, result: result?.result || null }
+      } catch (error) {
+        const mapped = mapConnectivityError(error)
+        setAuthConnectivityError(mapped)
+        return { ok: false, reason: mapped.reason || 'provider_error' }
+      }
+    },
+    [v2LastRequest]
+  )
+
+  const refreshV2Benchmarks = useCallback(async () => {
+    try {
+      const response = await benchmarkMetricsV2()
+      setV2Benchmarks(response || null)
+      return response
+    } catch {
+      return null
+    }
+  }, [])
+
   const runPlanner = async (message, source = 'chat') => {
     const trimmed = String(message || '').trim()
     if (!trimmed || sending) return
 
-    if (source === 'chat' && isGreetingOnlyMessage(trimmed)) {
-      pushUserMessage(trimmed)
-      pushAssistantMessage(
-        'Hi. I can optimize your plan, propose a study block, and schedule it after your approval.',
-        'local'
-      )
-      return
-    }
-
     pushUserMessage(trimmed)
     setSending(true)
 
-    const routeDecision = chooseModelRoute({
-      message: trimmed,
-      state: dashboard,
-      hasApiKey: Boolean(apiKeyRef.current),
-      hasServerPlanner: true
-    })
-
-    const plannerRequest = {
-      ...buildPlannerRequest(dashboard, trimmed),
-      aiPersonalization: settings.aiPersonalization,
-      contextualLayers: settings.contextualLayers,
-      aspirations: aspirations.map((item) => ({
-        title: item.title,
-        subtext: item.subtext,
-        status: item.status,
-        progress: item.progress,
-        targetLabel: item.targetLabel
-      }))
-    }
-
     try {
-      let plannerResult
-      if (routeDecision.route === 'local') {
-        plannerResult = runLocalPlanner(dashboard, trimmed, source)
-      } else {
-        plannerResult = await runDonnaPlannerApi({
-          request: plannerRequest,
-          route: routeDecision.route,
-          source,
-          apiKey: apiKeyRef.current || undefined
-        })
-        if (plannerResult?.usage) {
-          setPlannerUsage({
-            ok: true,
-            eligibility: plannerResult?.eligibility || null,
-            ...(plannerResult.usage || {})
-          })
-        }
+      const solveRequest = buildV2SolveRequestFromState()
+      setV2LastRequest(solveRequest)
+      const v2Response = await solvePlanV2({
+        message: trimmed,
+        request: solveRequest,
+        tokenCostCents: 1.2,
+        apiKey: apiKeyRef.current || undefined,
+        providerMode: providerModeRef.current,
+        localModel: localModelRef.current || undefined
+      })
+
+      const plannerResult = convertV2ResponseToPlannerResult(v2Response, solveRequest, source)
+      setV2PlannerMeta({
+        route: String(v2Response?.routeDecision?.route || plannerResult.route || 'standard'),
+        latencyMs: Number(v2Response?.latencyMs || 0),
+        fallback: Boolean(v2Response?.fallback || v2Response?.llmFallback),
+        providerUsed: String(v2Response?.providerUsed || providerModeRef.current || 'groq'),
+        fallbackReason: String(v2Response?.fallbackReason || '')
+      })
+      setV2EstimateBands(Array.isArray(v2Response?.estimateBands) ? v2Response.estimateBands : [])
+      setV2Forecast(Array.isArray(v2Response?.workloadForecast) ? v2Response.workloadForecast : [])
+
+      if (source === 'optimize') {
+        await notifyDecisionV2({
+          hourOfDay: new Date().getHours(),
+          dayOfWeek: new Date().getDay(),
+          urgencyBucket: 'high'
+        }).catch(() => null)
       }
 
       applyResult(plannerResult, source === 'chat' ? 'replan' : source)
-      pushAssistantMessage(plannerResult.assistantMessage, plannerResult.route)
-    } catch (error) {
-      const mapped = mapConnectivityError(error)
-      if (mapped?.usage?.limits) {
-        setPlannerUsage((prev) => ({
-          ok: true,
-          eligibility: prev?.eligibility || null,
-          ...mapped.usage
-        }))
-      }
-      if (
-        mapped.reason === 'backend_unavailable' ||
-        mapped.reason === 'misconfigured' ||
-        mapped.reason === 'provider_error'
-      ) {
-        setAuthConnectivityError(mapped)
-      }
-      const fallback = runLocalPlanner(dashboard, trimmed, source)
-      if (
-        mapped.reason === 'byok_required' ||
-        mapped.reason === 'quota_exceeded_hourly_ip' ||
-        mapped.reason === 'quota_exceeded_daily_user' ||
-        mapped.reason === 'quota_exceeded_weekly_tokens'
-      ) {
-        fallback.assistantMessage = `${mapped.message} I switched to local planning. Add your API key to continue cloud responses.`
-      } else if (mapped.reason === 'login_required') {
-        fallback.assistantMessage = 'Sign in is required for cloud planning. I switched to local planning for now.'
-      } else {
+      pushAssistantMessage(plannerResult.assistantMessage, plannerResult.route || 'standard')
+    } catch {
+      // Fallback to existing v1 planner path when v2 is unavailable or misconfigured.
+      try {
+        const routeDecision = chooseModelRoute({
+          message: trimmed,
+          state: dashboard,
+          hasApiKey: Boolean(apiKeyRef.current),
+          hasServerPlanner: true
+        })
+
+        const plannerRequest = {
+          ...buildPlannerRequest(dashboard, trimmed),
+          aiPersonalization: settings.aiPersonalization,
+          contextualLayers: settings.contextualLayers,
+          aspirations: aspirations.map((item) => ({
+            title: item.title,
+            subtext: item.subtext,
+            status: item.status,
+            progress: item.progress,
+            targetLabel: item.targetLabel
+          }))
+        }
+
+        let plannerResult
+        if (routeDecision.route === 'local') {
+          plannerResult = runLocalPlanner(dashboard, trimmed, source)
+        } else {
+          plannerResult = await runDonnaPlannerApi({
+            request: plannerRequest,
+            route: routeDecision.route,
+            source,
+            apiKey: apiKeyRef.current || undefined,
+            providerMode: providerModeRef.current,
+            localModel: localModelRef.current || undefined
+          })
+          if (plannerResult?.usage) {
+            setPlannerUsage({
+              ok: true,
+              eligibility: plannerResult?.eligibility || null,
+              ...(plannerResult.usage || {})
+            })
+          }
+        }
+
+        setV2PlannerMeta({
+          route: 'legacy',
+          latencyMs: 0,
+          fallback: Boolean(plannerResult?.fallback),
+          providerUsed: String(plannerResult?.providerUsed || providerModeRef.current || 'groq'),
+          fallbackReason: String(plannerResult?.fallbackReason || '')
+        })
+        applyResult(plannerResult, source === 'chat' ? 'replan' : source)
+        pushAssistantMessage(plannerResult.assistantMessage, plannerResult.route || 'local')
+      } catch (fallbackError) {
+        const mapped = mapConnectivityError(fallbackError)
+        if (
+          mapped.reason === 'backend_unavailable' ||
+          mapped.reason === 'misconfigured' ||
+          mapped.reason === 'provider_error'
+        ) {
+          setAuthConnectivityError(mapped)
+        }
+        const fallback = runLocalPlanner(dashboard, trimmed, source)
         fallback.assistantMessage =
-          'I switched to local planning for reliability and updated your plan. Add or refresh your BYOK key for cloud reasoning.'
+          'I switched to local planning for reliability and updated your plan. Bring the backend up to use algorithmic scheduling.'
+        setV2PlannerMeta({ route: 'local', latencyMs: 0, fallback: true, providerUsed: 'local_deterministic', fallbackReason: 'backend_or_provider_unavailable' })
+        applyResult(fallback, source === 'chat' ? 'replan' : source)
+        pushAssistantMessage(fallback.assistantMessage, 'local')
       }
-      applyResult(fallback, source === 'chat' ? 'replan' : source)
-      pushAssistantMessage(fallback.assistantMessage, 'local')
     } finally {
       setSending(false)
     }
@@ -1940,6 +2184,19 @@ export function DashboardProvider({ children }) {
         actionId: '',
         lastResult: { ok: true, actionId: targetId, status: normalized.status }
       })
+      if (normalized.status === 'executed') {
+        const rawHours =
+          (new Date(normalized.payload.end).getTime() - new Date(normalized.payload.start).getTime()) /
+          (1000 * 60 * 60)
+        const predictedHours = Number.isFinite(rawHours) && rawHours > 0 ? rawHours : 1
+        await logWorkEventV2({
+          taskId: normalized.id,
+          slotId: normalized.result?.googleEventId || normalized.result?.start || '',
+          predictedHours,
+          actualHours: predictedHours,
+          completionStatus: 'completed'
+        }).catch(() => null)
+      }
       return {
         ok: true,
         state: normalized.status === 'executed' ? 'connected_ready' : 'provider_error',
@@ -2131,6 +2388,8 @@ export function DashboardProvider({ children }) {
       removeScopedStorage(STORAGE_KEYS.chat, storageScope)
       removeScopedStorage(STORAGE_KEYS.focusHistory, storageScope)
       removeScopedStorage(STORAGE_KEYS.apiKey, storageScope)
+      removeScopedStorage(STORAGE_KEYS.providerMode, storageScope)
+      removeScopedStorage(STORAGE_KEYS.localModel, storageScope)
       removeScopedSessionStorage(STORAGE_KEYS.apiKey, storageScope)
       removeScopedStorage(STORAGE_KEYS.aspirations, storageScope)
       removeScopedStorage(STORAGE_KEYS.aspirationsArchive, storageScope)
@@ -2155,6 +2414,14 @@ export function DashboardProvider({ children }) {
 
   const setApiKeySession = (value) => {
     setApiKey(String(value || '').trim())
+  }
+
+  const setProviderModeSession = (value) => {
+    setProviderMode(String(value || '').trim() === 'local_ollama' ? 'local_ollama' : 'groq')
+  }
+
+  const setLocalModelSession = (value) => {
+    setLocalModel(String(value || '').trim())
   }
 
   const startLogin = (returnTo = window.location.href) => {
@@ -2192,6 +2459,8 @@ export function DashboardProvider({ children }) {
     apiKeyEditorOpen,
     setApiKeyEditorOpen,
     hasApiKey: Boolean(apiKey),
+    providerMode,
+    localModel,
     optimizePriorities,
     acknowledgeSuggestion,
     toggleSessionPause,
@@ -2200,6 +2469,8 @@ export function DashboardProvider({ children }) {
     runPlanner,
     resetLocalData,
     setApiKeySession,
+    setProviderModeSession,
+    setLocalModelSession,
     clearApiKey: () => setApiKey(''),
     authState,
     authConnectivity,
@@ -2209,6 +2480,13 @@ export function DashboardProvider({ children }) {
     plannerUsage,
     plannerUsageLoading,
     refreshPlannerUsage,
+    v2PlannerMeta,
+    v2Feasibility,
+    v2Forecast,
+    v2EstimateBands,
+    v2Benchmarks,
+    runFeasibilityQuery,
+    refreshV2Benchmarks,
     startLogin,
     logoutSession,
     setProfile,
