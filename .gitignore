@@ -31,3 +31,7 @@ algo-service/.venv
 algo-service/__pycache__
 algo-service/.pytest_cache
 **/__pycache__/
+archive/
+.claude/
+.context-compass/
+tmp_*.mjs

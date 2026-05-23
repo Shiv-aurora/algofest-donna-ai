@@ -15,10 +15,7 @@
     "migrate:legacy": "node scripts/import-legacy-to-postgres.mjs",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "prepare:design": "node scripts/prepare-design-assets.mjs",
-    "visual:diff": "node scripts/visual-diff.mjs",
-    "qa:screens": "node scripts/run-visual-qa.mjs"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
