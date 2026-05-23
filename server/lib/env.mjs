@@ -15,6 +15,22 @@ function parseList(value, fallback) {
     .filter(Boolean)
 }
 
+function toAbsoluteOrigin(value) {
+  const candidate = String(value || '').trim()
+  if (!candidate) return ''
+  try {
+    return new URL(candidate).origin
+  } catch {
+    return ''
+  }
+}
+
+function getVercelOrigin() {
+  const vercelUrl = String(process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || '').trim()
+  if (!vercelUrl) return ''
+  return toAbsoluteOrigin(vercelUrl.startsWith('http') ? vercelUrl : `https://${vercelUrl}`)
+}
+
 function sanitizeBaseUrl(value, fallback) {
   const candidate = String(value || fallback || '').trim()
   try {
@@ -107,15 +123,19 @@ export function loadEnv() {
   const nodeEnv = process.env.NODE_ENV || 'development'
   const isProduction = nodeEnv === 'production'
   const port = parseNumber(process.env.CONNECTIVITY_PORT, 8787)
-  const frontendOrigin = sanitizeBaseUrl(process.env.FRONTEND_ORIGIN, 'http://localhost:5173')
-  const serverBaseUrl = sanitizeBaseUrl(process.env.SERVER_BASE_URL, `http://localhost:${port}`)
+  const frontendOrigins = parseList(process.env.FRONTEND_ORIGIN, [])
+    .map(toAbsoluteOrigin)
+    .filter(Boolean)
+  const vercelOrigin = getVercelOrigin()
+  const frontendOrigin = frontendOrigins[0] || vercelOrigin || 'http://localhost:5173'
+  const serverBaseUrl = sanitizeBaseUrl(process.env.SERVER_BASE_URL, vercelOrigin || `http://localhost:${port}`)
 
   // Build the full set of allowed CORS origins.
   // Supports comma-separated values in FRONTEND_ORIGIN, and always includes
   // the server's own origin so same-domain Vercel deployments work without
   // needing a separate env var.
   const allowedOrigins = [
-    ...parseList(process.env.FRONTEND_ORIGIN, [frontendOrigin]).map((o) => sanitizeBaseUrl(o, '')).filter(Boolean),
+    ...(frontendOrigins.length > 0 ? frontendOrigins : [frontendOrigin]),
     sanitizeBaseUrl(serverBaseUrl, '')
   ].filter(Boolean).filter((o, i, arr) => arr.indexOf(o) === i)
   const googleCalendarScopes = parseList(process.env.GOOGLE_CALENDAR_SCOPES, [

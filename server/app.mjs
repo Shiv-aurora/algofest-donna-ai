@@ -38,6 +38,8 @@ const usageLimitStore = createUsageLimitStore(config.files.usageStoreFile, postg
 const authGuard = requireAuth(config)
 const algoClient = createAlgoClient(config)
 const GOOGLE_IDENTITY_SCOPES = ['openid', 'email', 'profile']
+const STATELESS_AUTH_COOKIE = 'donna.auth'
+const STATELESS_AUTH_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 if (config.trustProxy) {
   const trust = config.trustProxy === 'true' ? true : config.trustProxy
@@ -75,6 +77,7 @@ app.use(observability.requestContext)
 app.use(express.json({ limit: '100kb' }))
 const { middleware: sessionMiddleware } = await createSessionMiddleware(config)
 app.use(sessionMiddleware)
+app.use(restoreStatelessAuth)
 app.use(createCsrfProtection(config))
 app.use(
   '/api/v2',
@@ -140,6 +143,78 @@ function normalizeProvider(raw) {
 
 function getUserId(req) {
   return req.session?.user?.sub || null
+}
+
+function parseCookies(header = '') {
+  const cookies = {}
+  for (const part of String(header || '').split(';')) {
+    const [rawName, ...rawValue] = part.trim().split('=')
+    if (!rawName || rawValue.length === 0) continue
+    cookies[rawName] = decodeURIComponent(rawValue.join('='))
+  }
+  return cookies
+}
+
+function signStatelessValue(value) {
+  return crypto.createHmac('sha256', config.sessionSecret).update(value).digest('base64url')
+}
+
+function createStatelessAuthValue(user) {
+  const payload = Buffer.from(
+    JSON.stringify({
+      user,
+      exp: Date.now() + STATELESS_AUTH_TTL_MS
+    })
+  ).toString('base64url')
+  return `${payload}.${signStatelessValue(payload)}`
+}
+
+function verifyStatelessAuthValue(value) {
+  const [payload, signature] = String(value || '').split('.')
+  if (!payload || !signature) return null
+  const expected = signStatelessValue(payload)
+  const receivedBuffer = Buffer.from(signature)
+  const expectedBuffer = Buffer.from(expected)
+  if (receivedBuffer.length !== expectedBuffer.length) return null
+  if (!crypto.timingSafeEqual(receivedBuffer, expectedBuffer)) return null
+
+  try {
+    const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'))
+    if (!parsed?.exp || Date.now() > Number(parsed.exp)) return null
+    const user = parsed.user || null
+    if (!user?.sub || !['demo', 'guest'].includes(user.mode)) return null
+    return user
+  } catch {
+    return null
+  }
+}
+
+function setStatelessAuthCookie(res, user) {
+  res.cookie(STATELESS_AUTH_COOKIE, createStatelessAuthValue(user), {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: config.isProduction,
+    maxAge: STATELESS_AUTH_TTL_MS
+  })
+}
+
+function clearStatelessAuthCookie(res) {
+  res.clearCookie(STATELESS_AUTH_COOKIE, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: config.isProduction
+  })
+}
+
+function restoreStatelessAuth(req, _res, next) {
+  if (!req.session?.user?.sub) {
+    const cookies = parseCookies(req.headers?.cookie)
+    const user = verifyStatelessAuthValue(cookies[STATELESS_AUTH_COOKIE])
+    if (user) {
+      req.session.user = user
+    }
+  }
+  next()
 }
 
 function getUserMode(req) {
@@ -467,7 +542,7 @@ app.get('/health', (_req, res) => {
 })
 
 app.get('/api/auth/csrf', (req, res) => {
-  const token = ensureCsrfToken(req)
+  const token = ensureCsrfToken(req, res, config)
   res.json({ ok: true, csrfToken: token })
 })
 
@@ -648,6 +723,7 @@ app.post('/api/auth/guest-login', async (req, res, next) => {
     googleOAuth.clearGoogleTokens(req.session)
     ensureCsrfToken(req)
     await saveSession(req)
+    setStatelessAuthCookie(res, req.session.user)
     logAudit('auth.guest.success', { req, userSub: req.session.user.sub })
     res.status(201).json({ ok: true, redirectTo: returnTo })
   } catch (error) {
@@ -673,6 +749,7 @@ app.post('/api/auth/demo-login', async (req, res, next) => {
     googleOAuth.clearGoogleTokens(req.session)
     ensureCsrfToken(req)
     await saveSession(req)
+    setStatelessAuthCookie(res, req.session.user)
     logAudit('auth.demo.success', { req, userSub: req.session.user.sub })
     res.status(201).json({ ok: true, redirectTo: returnTo })
   } catch (error) {
@@ -710,6 +787,7 @@ app.post('/api/auth/logout', (req, res, next) => {
         sameSite: 'lax',
         secure: config.isProduction
       })
+      clearStatelessAuthCookie(res)
       observability.incrementCounter('auth_logout_total', { reasonCode: 'logged_out' })
       res.json({ ok: true, logoutUrl: returnTo, authStateCode: 'unauthenticated', reasonCode: 'logged_out' })
     })
