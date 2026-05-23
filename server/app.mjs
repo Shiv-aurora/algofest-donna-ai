@@ -47,7 +47,8 @@ if (config.trustProxy) {
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin || origin === config.frontendOrigin) return callback(null, true)
+      if (!origin) return callback(null, true)
+      if (config.allowedOrigins.includes(origin)) return callback(null, true)
       return callback(new Error(`Origin ${origin} is not allowed by CORS`), false)
     },
     credentials: true
@@ -58,7 +59,7 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        connectSrc: ["'self'", config.frontendOrigin],
+        connectSrc: ["'self'", ...config.allowedOrigins],
         frameAncestors: ["'none'"],
         imgSrc: ["'self'", 'data:'],
         objectSrc: ["'none'"],

@@ -109,6 +109,15 @@ export function loadEnv() {
   const port = parseNumber(process.env.CONNECTIVITY_PORT, 8787)
   const frontendOrigin = sanitizeBaseUrl(process.env.FRONTEND_ORIGIN, 'http://localhost:5173')
   const serverBaseUrl = sanitizeBaseUrl(process.env.SERVER_BASE_URL, `http://localhost:${port}`)
+
+  // Build the full set of allowed CORS origins.
+  // Supports comma-separated values in FRONTEND_ORIGIN, and always includes
+  // the server's own origin so same-domain Vercel deployments work without
+  // needing a separate env var.
+  const allowedOrigins = [
+    ...parseList(process.env.FRONTEND_ORIGIN, [frontendOrigin]).map((o) => sanitizeBaseUrl(o, '')).filter(Boolean),
+    sanitizeBaseUrl(serverBaseUrl, '')
+  ].filter(Boolean).filter((o, i, arr) => arr.indexOf(o) === i)
   const googleCalendarScopes = parseList(process.env.GOOGLE_CALENDAR_SCOPES, [
     'https://www.googleapis.com/auth/calendar.readonly',
     'https://www.googleapis.com/auth/calendar.events'
@@ -139,6 +148,7 @@ export function loadEnv() {
     isProduction,
     port,
     frontendOrigin,
+    allowedOrigins,
     serverBaseUrl,
     sessionSecret,
     redisUrl,
