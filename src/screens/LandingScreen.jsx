@@ -2,13 +2,14 @@ import { useEffect } from 'react'
 import LandingFooter from '../features/landing/LandingFooter'
 import LandingHeader from '../features/landing/LandingHeader'
 import {
-  LandingFeaturesSection,
+  LandingAlgorithmsSection,
+  LandingArchitectureSection,
+  LandingBenchmarksSection,
+  LandingDemoPathSection,
   LandingFinalCtaSection,
   LandingHeroSection,
-  LandingHowSection,
-  LandingPreviewSection,
-  LandingProblemSolutionSection,
-  LandingTrustSection
+  LandingMathSection,
+  LandingThesisSection
 } from '../features/landing/LandingSections'
 import '../features/landing/landing.css'
 
@@ -41,11 +42,12 @@ function LandingScreen() {
 
       <main>
         <LandingHeroSection />
-        <LandingProblemSolutionSection />
-        <LandingFeaturesSection />
-        <LandingHowSection />
-        <LandingPreviewSection />
-        <LandingTrustSection />
+        <LandingThesisSection />
+        <LandingArchitectureSection />
+        <LandingAlgorithmsSection />
+        <LandingMathSection />
+        <LandingBenchmarksSection />
+        <LandingDemoPathSection />
         <LandingFinalCtaSection />
       </main>
 

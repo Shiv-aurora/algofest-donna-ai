@@ -3,6 +3,25 @@
   background: #f4f7f8;
   color: #1a1c1e;
   overflow-x: hidden;
+  position: relative;
+  isolation: isolate;
+}
+
+.landing-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.16;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg fill='none' stroke='%23939aa6' stroke-width='1.1' stroke-linecap='round'%3E%3Cpath d='M20 42q10-8 20 0'/%3E%3Cpath d='M112 24l9 9m-9 0 9-9'/%3E%3Ccircle cx='152' cy='58' r='3.2'/%3E%3Cpath d='M34 128q14-10 28 0'/%3E%3Cpath d='M92 116l14 0'/%3E%3Cpath d='M98 109l0 14'/%3E%3Cpath d='M136 134q8-10 16 0'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  background-repeat: repeat;
+}
+
+.landing-page > * {
+  position: relative;
+  z-index: 1;
 }
 
 .landing-page h1,

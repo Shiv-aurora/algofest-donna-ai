@@ -1,163 +1,311 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { LANDING_ANCHORS, LANDING_ROUTES } from './landingLinks'
-import { NexusOrbVisual, RhythmEngineVisual } from './LandingVisuals'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  LabelList,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis
+} from 'recharts'
+import { LANDING_ROUTES } from './landingLinks'
 
-const PROBLEM_POINTS = [
-  {
-    title: 'Six tabs, one notes file.',
-    copy: 'Assignments, calendar, and priorities end up scattered across tools.'
-  },
-  {
-    title: 'Plans built too late.',
-    copy: 'You guess tomorrow at night, then re-plan again in the morning.'
-  },
-  {
-    title: 'To-do lists keep growing.',
-    copy: 'Tasks roll over without getting blocked into real time slots.'
-  }
-]
-
-const SOLUTION_POINTS = [
-  {
-    title: 'One command center.',
-    copy: 'Dashboard, assignments, calendar, goals, and settings live in one workflow.'
-  },
-  {
-    title: 'Proposal then approval.',
-    copy: 'Donna drafts study blocks from context. You approve before execution.'
-  },
-  {
-    title: 'Actions with history.',
-    copy: 'Proposed, approved, executed, and failed transitions are kept in action logs.'
-  }
-]
-
-const FEATURE_CARDS = [
+const ALGORITHM_CARDS = [
   {
     id: '01',
-    title: 'A planned day before you open your laptop.',
-    copy: 'Priorities are ordered around fixed events and available focus windows.'
+    title: 'CP-SAT Mixed Integer Program',
+    hook: 'min Σ w_k·penalty_k(x)',
+    description: 'Schedules tasks into slots with hard and soft constraints.',
+    line: 'OR-Tools CP-SAT · tabu warm-restart at n>100',
+    depth: {
+      title: 'CP-SAT full formulation',
+      content:
+        'Objective: min energy mismatch + context switching + overflow penalties + urgency misses. Constraints: task-hour coverage, slot exclusivity, blocked windows, deadline consistency, binary assignment variables, non-negative overflow. Includes warm-start strategy and bounded-time re-solves.'
+    }
   },
   {
     id: '02',
-    title: 'Approval-first calendar execution.',
-    copy: 'Nothing is written to calendar until you explicitly approve the action.'
+    title: 'Hierarchical Bayesian Gibbs Sampler',
+    hook: 'log(hours) ~ N(μ_u + α_t + β_c + γᵀx, σ²)',
+    description: 'Learns personalized task duration quantiles from completion history.',
+    line: 'Quantile outputs: P25 / P50 / P75 / P90',
+    depth: {
+      title: 'Bayesian estimator derivation',
+      content:
+        'Model uses hierarchical priors for users/tasks/classes with conjugate updates. Gibbs sampling iterates user effects, task effects, and variance terms. Posterior predictive distribution yields quantile bands used by scheduler constraints rather than single-point duration guesses.'
+    }
   },
   {
     id: '03',
-    title: 'Aspirations and progress in one place.',
-    copy: 'Track long-term goals through logged sessions and progression context.'
+    title: 'Irreducible Inconsistent Subset extraction',
+    hook: 'Output: minimal_conflict_set',
+    description: 'Returns minimal conflicting constraints causing schedule infeasibility.',
+    line: 'Constraint deletion loop for IIS recovery',
+    depth: {
+      title: 'IIS extraction details',
+      content:
+        'When infeasible, system removes constraints iteratively to isolate the smallest unsatisfiable subset. Returns only conflicts whose removal restores feasibility, enabling targeted user edits instead of generic failure messages.'
+    }
   },
   {
     id: '04',
-    title: 'Action history for every Donna operation.',
-    copy: 'Each study-block proposal and execution result remains visible and traceable.'
+    title: 'Large Neighborhood Search (anytime)',
+    hook: 'Destroy 10–20% neighborhood, repair with CP-SAT',
+    description: 'Repairs local schedule neighborhoods after user-requested changes.',
+    line: 'Anytime improvement under fixed latency budget',
+    depth: {
+      title: 'LNS formulation',
+      content:
+        'Reoptimization keeps most assignments fixed, selectively releases a local neighborhood, then repairs with CP-SAT. Accepts non-worsening candidates and continues until timeout, returning first feasible quickly while improving objective over remaining budget.'
+    }
   },
   {
     id: '05',
-    title: 'Connectivity-aware behavior.',
-    copy: 'If provider is unavailable, Donna returns clear machine-readable guard states.'
+    title: 'Cox Proportional Hazards model',
+    hook: 'h(t|x) = h₀(t)·exp(βᵀx)',
+    description: 'Predicts task start probability to surface procrastination risk.',
+    line: 'Triggers nudges when predicted start probability is low',
+    depth: {
+      title: 'Cox PH details',
+      content:
+        'Survival model estimates hazard of starting a task based on context features. Baseline hazard is non-parametric while covariates scale risk multiplicatively. Low near-term start probability flags intervention opportunities.'
+    }
+  },
+  {
+    id: '06',
+    title: 'Thompson Sampling contextual bandit',
+    hook: 'Regret bound: O(√(KT log T))',
+    description: 'Learns best notification times from response behavior online.',
+    line: '504 arms · Beta posterior sampling updates',
+    depth: {
+      title: 'Thompson sampling details',
+      content:
+        'Arms are (hour × day × urgency) combinations. For each arm, sample from Beta posterior, pull best sample, observe binary response reward, and update alpha/beta counts online. Balances exploration and exploitation across engagement contexts.'
+    }
+  },
+  {
+    id: '07',
+    title: 'Heterogeneous Autoregression (HAR)',
+    hook: 'load_{t+1} = β_d·d + β_w·w + β_m·m + ε',
+    description: 'Forecasts workload spikes using daily, weekly, monthly lags.',
+    line: 'Daily + weekly + monthly lag aggregation',
+    depth: {
+      title: 'HAR forecast details',
+      content:
+        'Forecast combines short, medium, and long memory terms to estimate upcoming workload. Output drives proactive warning states and informs planner slack allocation before likely crunch windows.'
+    }
+  },
+  {
+    id: '08',
+    title: 'Linear-Chain Conditional Random Field',
+    hook: 'P(y|x) ∝ exp(Σ λ_k f_k(y_{t-1}, y_t, x, t))',
+    description: 'Verifies syllabus extraction spans before planning actions trigger.',
+    line: 'Viterbi decoding on sequence tag lattice',
+    depth: {
+      title: 'CRF formulation details',
+      content:
+        'Sequence model scores tag transitions and token-level features jointly, then decodes highest-probability tag path with Viterbi. Disagreement checks against LLM extraction trigger user review before downstream scheduling.'
+    }
   }
 ]
 
-const TRUST_ITEMS = [
-  'Donna proposes before acting.',
-  'Approval is required for provider-backed writes.',
-  'Action lifecycle is visible: proposed, approved, executed, failed.',
-  'Calendar connectivity state is explicit across the app.',
-  'Read-only planning remains available when provider execution is unavailable.',
-  'Execution failures are surfaced with concise, machine-readable reasons.'
+const DEMO_STEPS = [
+  {
+    step: 'Upload syllabus PDF',
+    algo: 'CRF + LLM extraction',
+    detail: 'Produces a structured task graph from syllabus text spans.'
+  },
+  {
+    step: 'Estimate task hours',
+    algo: 'Bayesian quantile inference',
+    detail: 'Computes uncertainty-aware P25/P75 completion bands.'
+  },
+  {
+    step: 'Build week',
+    algo: 'CP-SAT MIP',
+    detail: 'Finds a feasible schedule under hard and soft constraints.'
+  },
+  {
+    step: 'Ask "can I take Friday off?"',
+    algo: 'IIS-based feasibility',
+    detail: 'Returns the minimal conflict set required to satisfy the request.'
+  },
+  {
+    step: 'Apply',
+    algo: 'Google Calendar API',
+    detail: 'Writes approved blocks as real calendar events.'
+  }
+]
+
+const latencyData = [
+  { n: 25, latency: 482 },
+  { n: 50, latency: 511 },
+  { n: 100, latency: 564 },
+  { n: 150, latency: 572 }
+]
+
+const tokenData = [
+  { name: 'LLM-only baseline', value: 2500, fill: 'rgba(26,28,30,0.25)' },
+  { name: 'Donna v2', value: 13, fill: '#1A1C1E' }
+]
+
+const costData = [
+  { name: 'LLM-only', value: 0.85, fill: 'rgba(26,28,30,0.25)' },
+  { name: 'Donna v2', value: 0.0052, fill: '#1A1C1E' }
+]
+
+const HERO_FLOW_STEPS = [
+  {
+    number: '1',
+    title: 'Upload syllabus',
+    icon: 'description',
+    points: ['Parse coursework']
+  },
+  {
+    number: '2',
+    title: 'Sync calendar',
+    icon: 'event',
+    points: ['Read availability']
+  },
+  {
+    number: '3',
+    title: 'Estimate effort',
+    icon: 'account_tree',
+    points: ['Build feasible week']
+  },
+  {
+    number: '4',
+    title: 'Review proposals',
+    icon: 'fact_check',
+    points: ['Confirm actions']
+  },
+  {
+    number: '5',
+    title: 'Write events',
+    icon: 'rocket_launch',
+    points: ['Track progress']
+  }
 ]
 
 function SectionKicker({ children }) {
   return (
-    <div className="mb-4 flex items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-[#74777F]">
-      <span className="inline-block h-px w-5 bg-[#74777F]/50" />
+    <div className="mb-4 flex items-center gap-2 text-[10px] uppercase tracking-[0.28em] text-[#74777F]">
+      <span className="inline-block h-px w-5 bg-[#74777F]/45" />
       {children}
     </div>
   )
 }
 
+function SectionDivider() {
+  return <div className="mx-auto h-px w-[min(1120px,92%)] bg-black/10" aria-hidden="true" />
+}
+
+function DisclosureModal({ open, title, content, onClose }) {
+  useEffect(() => {
+    if (!open) return undefined
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [open, onClose])
+
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/45" />
+      <div className="relative max-h-[85vh] w-full max-w-[500px] overflow-y-auto rounded-2xl border border-[#C4C7CF] bg-white p-5 shadow-[0_36px_72px_-32px_rgba(0,0,0,0.45)]" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-start justify-between gap-4">
+          <h4 className="text-[18px] font-semibold text-[#1A1C1E]">{title}</h4>
+          <button type="button" onClick={onClose} className="rounded-full border border-[#C4C7CF] px-2.5 py-1 text-[12px] text-[#44474E]">
+            Close
+          </button>
+        </div>
+        <p className="text-[14px] leading-relaxed text-[#44474E] whitespace-pre-line">{content}</p>
+      </div>
+    </div>
+  )
+}
+
+function DisclosureTrigger({ tier = 'text', label, onClick }) {
+  if (tier === 'icon') {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={label}
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-black/20 text-[11px] text-black/50 transition hover:text-black/80 hover:border-black/40"
+      >
+        ⓘ
+      </button>
+    )
+  }
+
+  return (
+    <button type="button" onClick={onClick} className="text-left text-[13px] font-medium text-[#1A1C1E] underline underline-offset-4 hover:text-[#000]">
+      {label}
+    </button>
+  )
+}
+
+function ChartCard({ title, children, caption }) {
+  return (
+    <article className="rounded-2xl border border-[#C4C7CF] bg-white p-4">
+      <h3 className="text-[15px] font-semibold text-[#1A1C1E]">{title}</h3>
+      <div className="mt-3 h-[220px]">{children}</div>
+      <p className="mt-2 text-[11px] uppercase tracking-[0.12em] text-[#74777F]">{caption}</p>
+    </article>
+  )
+}
+
 export function LandingHeroSection() {
   return (
-    <section className="landing-page__hero-gradient relative overflow-hidden px-8 pb-24 pt-36 md:px-16 md:pt-40">
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute left-[-8%] top-[-14%] h-[52%] w-[45%] rounded-full bg-[#78909C]/10 blur-[120px]" />
-        <div className="absolute bottom-[-16%] right-[-8%] h-[46%] w-[40%] rounded-full bg-[#c9e7f7]/80 blur-[110px]" />
-      </div>
-
-      <div className="relative mx-auto grid max-w-7xl items-center gap-14 lg:grid-cols-[1.15fr_1fr]">
-        <div data-reveal>
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#C4C7CF] bg-white/70 px-3 py-1 text-[12px] text-[#44474E]">
-            <span className="h-2 w-2 rounded-full bg-[#4d8a6e]" />
-            Approval-first AI for academic planning
-          </div>
-
-          <h1 className="font-headline text-[clamp(48px,8vw,96px)] font-extrabold leading-[0.96] tracking-[-0.04em] text-[#1A1C1E]">
-            Your academic <span className="text-[#466270]">chief of staff.</span>
-          </h1>
-          <p className="mt-7 max-w-xl text-[18px] font-light leading-relaxed text-[#44474E]">
-            Donna combines assignments, calendar context, and goal signals to propose focused work blocks that you can approve and execute.
-          </p>
-
-          <div className="mt-9 flex flex-wrap items-center gap-3">
-            <Link to={LANDING_ROUTES.app} className="landing-page__btn-primary">
-              Start with Donna
-              <span aria-hidden="true">↗</span>
-            </Link>
-            <a href={LANDING_ANCHORS.preview} className="landing-page__btn-ghost">
-              See product preview
-            </a>
-          </div>
-
-          <div className="mt-8 flex flex-wrap gap-5 text-[12px] text-[#74777F]">
-            <span>Assignment + calendar planning</span>
-            <span>Proposal + approval flow</span>
-            <span>Action history visibility</span>
-          </div>
+    <section className="landing-page__hero-gradient relative overflow-hidden px-8 pb-16 pt-2 md:px-16 md:pt-3">
+      <div className="relative mx-auto flex w-full max-w-[1500px] flex-col items-center text-center" data-reveal>
+        <div className="-mt-6 w-[min(90vw,1180px)] overflow-hidden md:-mt-8">
+          <img
+            src="/images/mascot/header-image.png?v=2"
+            alt="Donna mascot studying with books, laptop, and coffee"
+            className="mx-auto w-full object-contain [clip-path:inset(24%_8%_26%_8%)] scale-[0.98] md:scale-[0.96]"
+            loading="eager"
+          />
         </div>
-
-        <div data-reveal>
-          <div className="landing-page__product-card">
-            <div className="landing-page__product-top">
-              <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-[#e08a7a]" />
-                <span className="h-2.5 w-2.5 rounded-full bg-[#e0b87a]" />
-                <span className="h-2.5 w-2.5 rounded-full bg-[#a3c89c]" />
-              </div>
-              <span className="text-[11px] text-[#74777F]">donna.app • planned day</span>
-            </div>
-
-            <div className="space-y-3 p-5">
-              <div className="rounded-xl bg-[#eaeff1] p-3 text-[14px] leading-relaxed text-[#1A1C1E]">
-                I found open time before your afternoon seminar. I can place a focused study block there for approval.
-              </div>
-
-              <div className="space-y-2">
-                <div className="landing-page__agenda-row">
-                  <span className="landing-page__agenda-time">10:30</span>
-                  <span className="landing-page__agenda-label">CHEM 142 · problem set review</span>
-                  <span className="landing-page__agenda-tag">deep</span>
+        <h1 className="-mt-[240px] md:-mt-[220px] lg:-mt-[200px] bg-gradient-to-r from-[#0f1726] via-[#22334d] to-[#0f1726] bg-clip-text font-headline text-[clamp(34px,5vw,56px)] font-extrabold leading-[0.98] tracking-[-0.045em] text-transparent drop-shadow-[0_1px_0_rgba(255,255,255,0.6)]">
+          Your Academic Super Agent
+        </h1>
+        <p className="mt-2 max-w-5xl text-[13px] leading-relaxed text-[#5E6673]">
+          Plans your week, reschedules on the fly, finds time for work and hobbies, tracks your progress, learns how you work
+          - every decision made by an algorithm, not a guess.
+        </p>
+        <div className="mt-2 h-px w-[min(300px,58vw)] bg-gradient-to-r from-transparent via-[#99A2B2] to-transparent" />
+      </div>
+      <div className="relative mx-auto mt-14 max-w-7xl" data-reveal>
+        <div className="px-1 md:px-0">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+            {HERO_FLOW_STEPS.map((step, index) => (
+              <div key={step.number} className="relative rounded-2xl bg-white/45 p-4 ring-1 ring-[#D1D6DE] backdrop-blur-sm">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#E8EDF3] text-[#1A1C1E]">
+                    <span className="material-symbols-outlined !text-[18px]">{step.icon}</span>
+                  </div>
+                  <div className="text-[10px] font-semibold tracking-[0.16em] text-[#6C7380]">{step.number}</div>
                 </div>
-                <div className="landing-page__agenda-row">
-                  <span className="landing-page__agenda-time">14:00</span>
-                  <span className="landing-page__agenda-label">PHIL 220 reading sprint</span>
-                  <span className="landing-page__agenda-tag">review</span>
+                <h3 className="text-[20px] font-semibold leading-[1.02] text-[#1A1C1E]">{step.title}</h3>
+                <div className="mt-2 space-y-1 text-[11px] text-[#3F4753]">
+                  {step.points.map((point) => (
+                    <p key={point}>{point}</p>
+                  ))}
                 </div>
-                <div className="landing-page__agenda-row">
-                  <span className="landing-page__agenda-time">19:30</span>
-                  <span className="landing-page__agenda-label">Orgo flashcards</span>
-                  <span className="landing-page__agenda-tag">light</span>
-                </div>
+                {index < HERO_FLOW_STEPS.length - 1 ? (
+                  <span className="pointer-events-none absolute -right-[12px] top-1/2 hidden -translate-y-1/2 text-[28px] text-[#5f6978] md:block">→</span>
+                ) : null}
               </div>
-
-              <div className="flex items-center justify-between rounded-xl bg-[#1A1C1E] px-3 py-2 text-[12px] text-white">
-                <span>2 blocks awaiting approval</span>
-                <Link to={LANDING_ROUTES.app} className="rounded-md border border-white/20 px-2 py-1 text-[11px]">
-                  Open app
-                </Link>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </div>
@@ -165,234 +313,412 @@ export function LandingHeroSection() {
   )
 }
 
-export function LandingProblemSolutionSection() {
+export function LandingThesisSection() {
+  const [modal, setModal] = useState(null)
   return (
-    <section className="bg-[#1A1C1E] px-8 py-24 text-white md:mx-8 md:rounded-[32px] md:px-16">
-      <div className="mx-auto max-w-7xl" data-reveal>
-        <SectionKicker>The honest version</SectionKicker>
-        <h2 className="font-headline text-[clamp(36px,5vw,56px)] font-bold leading-[1.04] tracking-[-0.03em]">
-          Small decisions, made tired, in the dark.
-        </h2>
-
-        <div className="mt-12 grid gap-8 md:grid-cols-2">
-          <div className="rounded-2xl border border-white/15 bg-white/[0.02] p-6">
-            <h3 className="mb-5 text-xl font-semibold">Without Donna</h3>
-            <ul className="space-y-4 text-sm text-white/70">
-              {PROBLEM_POINTS.map((item) => (
-                <li key={item.title}>
-                  <p className="font-semibold text-white">{item.title}</p>
-                  <p>{item.copy}</p>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="rounded-2xl border border-[#78909C]/40 bg-[#78909C]/10 p-6">
-            <h3 className="mb-5 text-xl font-semibold">With Donna</h3>
-            <ul className="space-y-4 text-sm text-[#d7e2e8]">
-              {SOLUTION_POINTS.map((item) => (
-                <li key={item.title}>
-                  <p className="font-semibold text-white">{item.title}</p>
-                  <p>{item.copy}</p>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-export function LandingFeaturesSection() {
-  return (
-    <section id="features" className="px-8 py-24 md:px-16">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-12 flex flex-wrap items-end justify-between gap-6" data-reveal>
-          <div>
-            <SectionKicker>Capabilities</SectionKicker>
-            <h2 className="font-headline text-[clamp(34px,4vw,54px)] font-bold tracking-[-0.03em]">Built for execution.</h2>
-          </div>
-          <p className="max-w-md text-[16px] text-[#44474E]">These behaviors map to current Donna routes, provider state, and action APIs.</p>
-        </div>
-
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {FEATURE_CARDS.map((card) => (
-            <article
-              key={card.id}
-              data-reveal
-              className="landing-page__feature-card rounded-2xl border border-[#C4C7CF]/80 bg-white p-6 shadow-[0_24px_40px_-30px_rgba(0,0,0,0.35)]"
-            >
-              <div className="mb-3 text-[12px] font-semibold tracking-[0.2em] text-[#74777F]">{card.id}</div>
-              <h3 className="text-[20px] font-semibold leading-tight text-[#1A1C1E]">{card.title}</h3>
-              <p className="mt-3 text-[14px] leading-relaxed text-[#44474E]">{card.copy}</p>
-            </article>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-export function LandingHowSection() {
-  return (
-    <section id="how" className="px-8 pb-20 pt-8 md:px-16">
-      <div className="mx-auto max-w-7xl" data-reveal>
-        <SectionKicker>How it works</SectionKicker>
-        <h2 className="font-headline text-[clamp(34px,4vw,54px)] font-bold tracking-[-0.03em]">
-          Three steps. One approval away.
-        </h2>
-
-        <div className="mt-10 grid gap-4 md:grid-cols-3">
-          <div className="rounded-xl border border-[#C4C7CF] bg-white p-5">
-            <div className="text-[11px] uppercase tracking-[0.2em] text-[#74777F]">Step 1</div>
-            <h3 className="mt-2 text-xl font-semibold">Connect</h3>
-            <p className="mt-2 text-sm text-[#44474E]">Connect Google Calendar and monitor provider readiness from settings.</p>
-          </div>
-          <div className="rounded-xl border border-[#C4C7CF] bg-white p-5">
-            <div className="text-[11px] uppercase tracking-[0.2em] text-[#74777F]">Step 2</div>
-            <h3 className="mt-2 text-xl font-semibold">Propose</h3>
-            <p className="mt-2 text-sm text-[#44474E]">Donna reads calendar context and proposes structured study-block actions.</p>
-          </div>
-          <div className="rounded-xl border border-[#C4C7CF] bg-white p-5">
-            <div className="text-[11px] uppercase tracking-[0.2em] text-[#74777F]">Step 3</div>
-            <h3 className="mt-2 text-xl font-semibold">Approve</h3>
-            <p className="mt-2 text-sm text-[#44474E]">Approval executes creation and records status transitions in action history.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-export function LandingPreviewSection() {
-  return (
-    <section id="preview" className="bg-white px-8 py-24 md:px-16">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-12 flex flex-wrap items-end justify-between gap-6" data-reveal>
-          <div>
-            <SectionKicker>Product</SectionKicker>
-            <h2 className="font-headline text-[clamp(34px,4vw,54px)] font-bold tracking-[-0.03em]">A workspace built around doing the work.</h2>
-          </div>
-          <p className="max-w-md text-[16px] text-[#44474E]">Overview, merged planning workspace, aspirations, and settings are available in one app shell.</p>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-[1.45fr_1fr]" data-reveal>
-          <div className="overflow-hidden rounded-2xl border border-[#C4C7CF] bg-[#F8FAFB] shadow-[0_28px_50px_-30px_rgba(0,0,0,0.35)]">
-            <img
-              src="/images/landing/overview-mockup.jpg"
-              alt="Donna dashboard preview"
-              className="h-full w-full object-cover"
-              loading="lazy"
-            />
-          </div>
-
-          <aside className="space-y-4 rounded-2xl border border-[#C4C7CF] bg-[#FDFDFD] p-5">
+    <>
+      <SectionDivider />
+      <section className="px-8 py-28 md:px-16" id="thesis">
+        <div className="mx-auto max-w-7xl" data-reveal>
+          <div className="grid items-start gap-8 lg:grid-cols-[0.68fr_0.32fr]">
             <div>
-              <div className="text-[12px] uppercase tracking-[0.2em] text-[#74777F]">Live behavior</div>
-              <h3 className="mt-2 text-[22px] font-semibold text-[#1A1C1E]">Donna Actions</h3>
+              <SectionKicker>PRODUCT</SectionKicker>
+              <h2 className="font-headline text-[clamp(28px,3.2vw,44px)] font-bold tracking-[-0.03em]">
+                Not a LLM wrapper.
+              </h2>
+
+              <p className="mt-6 max-w-3xl text-[15px] leading-relaxed text-[#44474E]">
+                I first tried building this as an all-LLM planner. The output looked smart, but it was often <strong><em>non-deterministic</em></strong>, inconsistent, and hard to trust for real deadlines. Academic work is too important to leave to a black box, so Donna was redesigned as a <strong><em>hybrid system</em></strong> where LLMs handle language and algorithms handle decisions.
+              </p>
+              <p className="mt-5 max-w-3xl text-[15px] leading-relaxed text-[#44474E]">
+                Today it runs on <strong><em>8 algorithmic models</em></strong> to keep planning reliable, cheaper, and scalable while the UX stays simple for students. The goal is practical: help more college students stay on top of academics and still have room to enjoy college life with less stress and better consistency.
+              </p>
             </div>
 
-            <div className="rounded-xl border border-[#C4C7CF] bg-white p-4">
-              <div className="text-[11px] uppercase tracking-[0.2em] text-[#74777F]">Proposed</div>
-              <p className="mt-1 text-sm text-[#1A1C1E]">Example: CHEM 142 study block • 7:00 PM - 8:30 PM</p>
+            <div className="mx-auto w-full max-w-[360px]">
+              <div className="h-[420px] w-full overflow-hidden">
+                <img
+                  src="/images/mascot/donna-superman.png"
+                  alt="Donna superman mascot"
+                  className="h-full w-full object-contain"
+                  loading="lazy"
+                />
+              </div>
             </div>
-            <div className="rounded-xl border border-[#C4C7CF] bg-white p-4">
-              <div className="text-[11px] uppercase tracking-[0.2em] text-[#74777F]">Execution</div>
-              <p className="mt-1 text-sm text-[#1A1C1E]">Approved actions call backend and create calendar events when connected.</p>
-            </div>
-            <div className="rounded-xl border border-[#C4C7CF] bg-white p-4">
-              <div className="text-[11px] uppercase tracking-[0.2em] text-[#74777F]">History</div>
-              <p className="mt-1 text-sm text-[#1A1C1E]">Latest statuses remain visible: proposed, approved, executed, failed.</p>
-            </div>
-
-            <Link to={LANDING_ROUTES.app} className="landing-page__btn-primary inline-flex">
-              Open live app
-            </Link>
-          </aside>
-        </div>
-
-        <div className="mt-8 grid gap-4 sm:grid-cols-2" data-reveal>
-          <article className="overflow-hidden rounded-xl border border-[#C4C7CF] bg-[#F8FAFB]">
-            <img
-              src="/images/landing/today-workspace.jpg"
-              alt="Today workspace preview"
-              className="h-44 w-full object-cover"
-              loading="lazy"
-            />
-            <div className="p-3 text-[13px] text-[#44474E]">Daily priorities and session guidance in one focused view.</div>
-          </article>
-          <article className="overflow-hidden rounded-xl border border-[#C4C7CF] bg-[#F8FAFB]">
-            <img
-              src="/images/landing/calendar-focus.jpg"
-              alt="Calendar planning preview"
-              className="h-44 w-full object-cover"
-              loading="lazy"
-            />
-            <div className="p-3 text-[13px] text-[#44474E]">Calendar-aware planning with actionable assignment context.</div>
-          </article>
-        </div>
-
-        <div className="mt-10 grid gap-6 lg:grid-cols-2">
-          <div data-reveal>
-            <RhythmEngineVisual />
           </div>
-          <div data-reveal>
-            <NexusOrbVisual />
+
+          <div className="mt-8 overflow-x-auto rounded-2xl border border-[#C4C7CF] bg-white">
+            <table className="w-full min-w-[720px] border-collapse text-left text-[13px]">
+              <thead className="bg-[#F4F7F8] text-[#1A1C1E]">
+                <tr>
+                  <th className="border-b border-[#D6D9E0] px-4 py-2.5 font-semibold">Workflow step</th>
+                  <th className="border-b border-[#D6D9E0] bg-[#f6f8fb] px-4 py-2.5 font-semibold">Without Donna</th>
+                  <th className="border-b border-[#D6D9E0] bg-[#edf3f7] px-4 py-2.5 font-semibold">With Donna</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td className="border-b border-[#ECEFF4] px-4 py-2.5 font-medium text-[#1A1C1E]">Capture coursework</td>
+                  <td className="border-b border-[#ECEFF4] bg-[#f9fbfd] px-4 py-2.5 text-[#44474E]">Manual copy from PDFs and LMS pages</td>
+                  <td className="border-b border-[#ECEFF4] bg-[#f1f6fa] px-4 py-2.5 font-semibold text-[#1A1C1E]">Syllabus ingestion into structured task graph</td>
+                </tr>
+                <tr>
+                  <td className="border-b border-[#ECEFF4] px-4 py-2.5 font-medium text-[#1A1C1E]">Decide daily priorities</td>
+                  <td className="border-b border-[#ECEFF4] bg-[#f9fbfd] px-4 py-2.5 text-[#44474E]">Ad-hoc to-do list ordering</td>
+                  <td className="border-b border-[#ECEFF4] bg-[#f1f6fa] px-4 py-2.5 font-semibold text-[#1A1C1E]">Priority-aware plan with deadlines and effort bands</td>
+                </tr>
+                <tr>
+                  <td className="border-b border-[#ECEFF4] px-4 py-2.5 font-medium text-[#1A1C1E]">Calendar execution</td>
+                  <td className="border-b border-[#ECEFF4] bg-[#f9fbfd] px-4 py-2.5 text-[#44474E]">Manual event creation and edits</td>
+                  <td className="border-b border-[#ECEFF4] bg-[#f1f6fa] px-4 py-2.5 font-semibold text-[#1A1C1E]">
+                    <span className="inline-flex items-center gap-2">
+                      Approval-first write to Google Calendar
+                      <DisclosureTrigger
+                        tier="icon"
+                        label="Action lifecycle details"
+                        onClick={() =>
+                          setModal({
+                            title: 'Calendar action lifecycle',
+                            content:
+                              'Every calendar write follows proposed → approved → executed states. Proposed actions remain editable, approval gates provider writes, and execution/failure is logged as immutable action history for auditability.'
+                          })
+                        }
+                      />
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td className="border-b border-[#ECEFF4] px-4 py-2.5 font-medium text-[#1A1C1E]">Handle schedule changes</td>
+                  <td className="border-b border-[#ECEFF4] bg-[#f9fbfd] px-4 py-2.5 text-[#44474E]">Rebuild plan manually</td>
+                  <td className="border-b border-[#ECEFF4] bg-[#f1f6fa] px-4 py-2.5 font-semibold text-[#1A1C1E]">Fast re-optimization with conflict explanations</td>
+                </tr>
+                <tr>
+                  <td className="border-b border-[#ECEFF4] px-4 py-2.5 font-medium text-[#1A1C1E]">Progress feedback loop</td>
+                  <td className="border-b border-[#ECEFF4] bg-[#f9fbfd] px-4 py-2.5 text-[#44474E]">No unified learning loop</td>
+                  <td className="border-b border-[#ECEFF4] bg-[#f1f6fa] px-4 py-2.5 font-semibold text-[#1A1C1E]">Adaptive estimates from completion history</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
+
+          <p className="mt-3 text-[11px] text-[#74777F]">
+            Technical architecture, algorithm catalog, and measured benchmarks follow below.
+          </p>
         </div>
-      </div>
-    </section>
+      </section>
+      <DisclosureModal open={Boolean(modal)} title={modal?.title} content={modal?.content} onClose={() => setModal(null)} />
+    </>
   )
 }
 
-export function LandingTrustSection() {
+export function LandingArchitectureSection() {
+  const [modal, setModal] = useState(null)
   return (
-    <section id="trust" className="px-8 py-24 md:px-16">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-10 flex flex-wrap items-end justify-between gap-6" data-reveal>
-          <div>
-            <SectionKicker>Trust and control</SectionKicker>
-            <h2 className="font-headline text-[clamp(34px,4vw,54px)] font-bold tracking-[-0.03em]">An agent that asks before it acts.</h2>
-          </div>
-          <p className="max-w-md text-[16px] text-[#44474E]">Donna prioritizes explicit approval and clear operational state over hidden automation.</p>
-        </div>
+    <>
+      <SectionDivider />
+      <section id="architecture" className="px-8 py-28 md:px-16">
+        <div className="mx-auto max-w-7xl" data-reveal>
+          <SectionKicker>ARCHITECTURE</SectionKicker>
+          <h2 className="font-headline text-[clamp(28px,3.2vw,44px)] font-bold tracking-[-0.03em]">
+            Your Academic Structure
+            <span className="ml-2 align-middle">
+              <DisclosureTrigger
+                tier="icon"
+                label="Architecture rationale"
+                onClick={() =>
+                  setModal({
+                    title: 'Why the three-plane architecture',
+                    content:
+                      'Control plane handles identity, routing, and approvals. Algorithm plane runs deterministic optimization and inference workloads isolated from user-session concerns. Data plane stores telemetry/state and provider sync. Separation keeps policy logic stable while allowing independent scaling and observability.'
+                  })
+                }
+              />
+            </span>
+          </h2>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" data-reveal>
-          {TRUST_ITEMS.map((item, index) => (
-            <article key={item} className="rounded-xl border border-[#C4C7CF] bg-white p-5">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#74777F]">No. {String(index + 1).padStart(2, '0')}</div>
-              <p className="mt-2 text-sm leading-relaxed text-[#1A1C1E]">{item}</p>
-            </article>
-          ))}
+          <div className="mt-8 overflow-hidden rounded-2xl p-1">
+            <img
+              src="/images/mascot/system-dig.png"
+              alt="Donna v2 system architecture diagram"
+              className="h-auto w-full rounded-xl"
+              loading="lazy"
+            />
+          </div>
+
+          <div className="mt-7 grid gap-4 text-[14px] text-[#44474E] md:grid-cols-3">
+            <p>Control plane (Node/Express): auth, sessions, Google OAuth, action approval, routing decisions</p>
+            <p>Algorithm plane (Python/FastAPI): CP-SAT solver, Bayesian inference, survival fits, bandit posteriors, HAR forecasts</p>
+            <p>Data plane (Postgres + TimescaleDB): closed-loop telemetry feeds estimator, bandit, factorization</p>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+      <DisclosureModal open={Boolean(modal)} title={modal?.title} content={modal?.content} onClose={() => setModal(null)} />
+    </>
+  )
+}
+
+export function LandingAlgorithmsSection() {
+  const [modal, setModal] = useState(null)
+  return (
+    <>
+      <SectionDivider />
+      <section id="algorithms" className="px-8 py-28 md:px-16">
+        <div className="mx-auto max-w-7xl" data-reveal>
+          <SectionKicker>ALGORITHM CATALOG</SectionKicker>
+          <h2 className="font-headline text-[clamp(28px,3.2vw,44px)] font-bold tracking-[-0.03em]">
+            8 Proprietary Algorithms wired together
+          </h2>
+
+          <div className="mt-8 grid gap-5 md:grid-cols-2">
+            {ALGORITHM_CARDS.map((card) => (
+              <article key={card.id} className="rounded-2xl border border-[#C4C7CF]/80 bg-white p-5 shadow-[0_24px_40px_-34px_rgba(0,0,0,0.35)]">
+                <div className="text-[11px] font-semibold tracking-[0.2em] text-[#74777F]">{card.id}</div>
+                <h3 className="mt-2 text-[20px] font-semibold leading-tight text-[#1A1C1E]">{card.title}</h3>
+                <p className="mt-2.5 text-[14px] leading-relaxed text-[#1A1C1E]">{card.description}</p>
+                <p className="mt-2 font-mono text-[13px] text-[#1A1C1E]">{card.hook}</p>
+                <p className="mt-2 text-[13px] text-[#44474E]">{card.line}</p>
+                <div className="mt-3">
+                  <DisclosureTrigger tier="text" label="See full formulation →" onClick={() => setModal(card.depth)} />
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <p className="mt-3 text-[11px] text-[#74777F]">
+            Three additional Groq LLM roles handle intent parsing, syllabus extraction, and schedule explanation. They never
+            make scheduling decisions.
+          </p>
+        </div>
+      </section>
+      <DisclosureModal open={Boolean(modal)} title={modal?.title} content={modal?.content} onClose={() => setModal(null)} />
+    </>
+  )
+}
+
+export function LandingMathSection() {
+  const [modal, setModal] = useState(null)
+  return (
+    <>
+      <SectionDivider />
+      <section id="math" className="bg-white px-8 py-28 md:px-16">
+        <div className="mx-auto max-w-7xl" data-reveal>
+          <SectionKicker>FORMULATIONS</SectionKicker>
+          <h2 className="font-headline text-[clamp(28px,3.2vw,44px)] font-bold tracking-[-0.03em]">The Math.</h2>
+
+          <div className="mt-8 grid auto-rows-fr gap-5 lg:grid-cols-3">
+            <div className="rounded-2xl border border-[#C4C7CF] bg-[#f6f8fb] p-4">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#74777F]">SCHEDULING</p>
+              <pre className="h-[290px] overflow-x-auto text-[10px] leading-[1.5] text-[#1A1C1E]">
+{`min   Σ w1·energy_mismatch[t,h]·x[i,s]
+    + Σ w2·switch[s]
+    + Σ w3·overflow[i]^2
+    + Σ w4·urgency[i]·(1-y[i])
+
+s.t.  Σ_s x[i,s]·dur[s] ≥ P75[i] - overflow[i]   ∀i
+      Σ_i x[i,s] ≤ 1                              ∀s
+      x[i,s] = 0  if s ∈ blocked                  ∀i,s
+      x[i,s] = 0  if start[s] > deadline[i]       ∀i,s
+      x, y ∈ {0,1}, overflow ≥ 0`}
+              </pre>
+              <DisclosureTrigger
+                tier="text"
+                label="See variable definitions & derivation →"
+                onClick={() =>
+                  setModal({
+                    title: 'Scheduling variables and derivation',
+                    content:
+                      'x[i,s] is binary assignment of task i to slot s; overflow[i] captures unmet required duration; switch[s] penalizes fragmentation; urgency weights penalize unmet critical tasks. Derivation maps soft-preference tradeoffs into a weighted objective under hard feasibility constraints.'
+                  })
+                }
+              />
+            </div>
+
+            <div className="rounded-2xl border border-[#C4C7CF] bg-[#f6f8fb] p-4">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#74777F]">ESTIMATION</p>
+              <pre className="h-[290px] overflow-x-auto text-[10px] leading-[1.5] text-[#1A1C1E]">
+{`log(hours_i) ~ Normal(μ_u + α_t + β_c + γᵀx, σ²)
+
+Priors:  α_u ~ N(0, τ_u²),  β_t ~ N(0, τ_t²)
+Hyperpriors:  τ² ~ InverseGamma(a, b)
+
+Posterior via Gibbs:
+  μ_u | rest ~ N(weighted_mean, weighted_var)
+  τ_u² | rest ~ InverseGamma(a + n/2, b + SS/2)`}
+              </pre>
+              <DisclosureTrigger
+                tier="text"
+                label="See variable definitions & derivation →"
+                onClick={() =>
+                  setModal({
+                    title: 'Estimator variable definitions',
+                    content:
+                      'μ_u is user baseline, α_t task effect, β_c class/course effect, γ feature weights, and σ² residual variance. Hyperpriors regularize sparse users and cold starts. Gibbs alternates conditional updates until convergence and yields posterior quantile estimates.'
+                  })
+                }
+              />
+            </div>
+
+            <div className="rounded-2xl border border-[#C4C7CF] bg-[#f6f8fb] p-4">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#74777F]">NOTIFICATION TIMING</p>
+              <pre className="h-[290px] overflow-x-auto text-[10px] leading-[1.5] text-[#1A1C1E]">
+{`For arm a = (hour, day, urgency):
+  Prior:    θ_a ~ Beta(α_a⁰, β_a⁰)
+  Sample:   θ̃_a ~ Beta(α_a, β_a)
+  Pull:     a* = argmax_a θ̃_a
+  Reward:   r ∈ {0, 1}  (acted within 30min)
+  Update:   α_a ← α_a + r,  β_a ← β_a + (1 - r)
+
+Regret bound: R(T) = O(√(K·T·log T))`}
+              </pre>
+              <DisclosureTrigger
+                tier="text"
+                label="See variable definitions & derivation →"
+                onClick={() =>
+                  setModal({
+                    title: 'Bandit definitions and update flow',
+                    content:
+                      'Each arm corresponds to a notification context. α/β track success and failure counts under Beta-Bernoulli assumptions. Sampling from each posterior estimates expected response; updates incorporate acted-within-30-min reward signals to continuously improve policy timing.'
+                  })
+                }
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+      <DisclosureModal open={Boolean(modal)} title={modal?.title} content={modal?.content} onClose={() => setModal(null)} />
+    </>
+  )
+}
+
+export function LandingBenchmarksSection() {
+  const [modal, setModal] = useState(null)
+  return (
+    <>
+      <SectionDivider />
+      <section id="benchmarks" className="px-8 py-28 md:px-16">
+        <div className="mx-auto max-w-7xl" data-reveal>
+          <SectionKicker>MEASURED PERFORMANCE</SectionKicker>
+          <h2 className="font-headline text-[clamp(28px,3.2vw,44px)] font-bold tracking-[-0.03em]">Donna vs LLM: Efficiency gains</h2>
+
+          <div className="mt-8 grid gap-5 lg:grid-cols-3">
+            <ChartCard title="p50 latency (ms)" caption="n = task count">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={latencyData} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#d9dfe6" />
+                  <XAxis dataKey="n" tick={{ fontSize: 11, fill: '#44474E' }} label={{ value: 'task count', position: 'insideBottom', offset: -6, fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11, fill: '#44474E' }} label={{ value: 'ms', angle: -90, position: 'insideLeft', fontSize: 11 }} domain={[440, 600]} />
+                  <Tooltip formatter={(value) => [`${value} ms`, 'p50']} />
+                  <Line type="monotone" dataKey="latency" stroke="#1A1C1E" strokeWidth={2.2} dot={{ r: 3, fill: '#1A1C1E' }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <ChartCard title="Tokens per planning turn" caption="Measured via scripts/benchmark-tokens.py, 30 seeds × 4 task sizes">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={tokenData} layout="vertical" margin={{ top: 8, right: 28, left: 18, bottom: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#d9dfe6" />
+                  <XAxis type="number" tick={{ fontSize: 11, fill: '#44474E' }} />
+                  <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11, fill: '#44474E' }} />
+                  <Tooltip formatter={(value) => [`${value}`, 'tokens']} />
+                  <Bar dataKey="value" radius={[4, 4, 4, 4]}>
+                    <LabelList dataKey="value" position="right" style={{ fill: '#1A1C1E', fontSize: 11 }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </ChartCard>
+
+            <article className="rounded-2xl border border-[#C4C7CF] bg-white p-4">
+              <h3 className="text-[15px] font-semibold text-[#1A1C1E]">Cost per 1k turns</h3>
+              <div className="mt-3 text-[40px] font-bold tracking-[-0.03em] text-[#1A1C1E]">$0.0052</div>
+              <p className="mt-1 text-[13px] text-[#44474E]">vs $0.85 baseline</p>
+              <div className="mt-2 h-[130px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={costData} layout="vertical" margin={{ top: 8, right: 28, left: 18, bottom: 8 }}>
+                    <XAxis type="number" tick={{ fontSize: 10, fill: '#44474E' }} domain={[0, 0.9]} />
+                    <YAxis type="category" dataKey="name" width={70} tick={{ fontSize: 10, fill: '#44474E' }} />
+                    <Tooltip formatter={(value) => [`$${value}`, 'cost']} />
+                    <Bar dataKey="value" radius={[4, 4, 4, 4]}>
+                      <LabelList dataKey="value" position="right" formatter={(v) => `$${v}`} style={{ fill: '#1A1C1E', fontSize: 10 }} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="mt-2 text-[14px] font-semibold text-[#1A1C1E]">163× cheaper</p>
+              <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-[#74777F]">
+                Measured via scripts/benchmark-tokens.py, 30 seeds × 4 task sizes
+              </p>
+            </article>
+          </div>
+
+          <p className="mt-4 text-[11px] text-[#74777F]">
+            Benchmark harness: 30 seeds × 4 task sizes, executed on a single-node Docker stack. Reproducible via
+            scripts/benchmark-tokens.py.
+          </p>
+          <div className="mt-2">
+            <DisclosureTrigger
+              tier="text"
+              label="See benchmark methodology →"
+              onClick={() =>
+                setModal({
+                  title: 'Benchmark methodology',
+                  content:
+                    'Runs use 30 random seeds across task counts n={25,50,100,150} on a single-node Docker stack. Reported figures include latency p50 and comparative token/cost totals per turn. Measurements are reproducible via scripts/benchmark-tokens.py with fixed scenario generation and unified logging pipeline.'
+                })
+              }
+            />
+          </div>
+        </div>
+      </section>
+      <DisclosureModal open={Boolean(modal)} title={modal?.title} content={modal?.content} onClose={() => setModal(null)} />
+    </>
+  )
+}
+
+export function LandingDemoPathSection() {
+  return (
+    <>
+      <SectionDivider />
+      <section id="demo-path" className="bg-white px-8 py-28 md:px-16">
+        <div className="mx-auto max-w-7xl" data-reveal>
+          <SectionKicker>END-TO-END</SectionKicker>
+          <h2 className="font-headline text-[clamp(28px,3.2vw,44px)] font-bold tracking-[-0.03em]">One request, end to end.</h2>
+
+          <div className="mt-8 grid gap-4 lg:grid-cols-5">
+            {DEMO_STEPS.map((item, index) => (
+              <article key={item.step} className="rounded-xl border border-[#C4C7CF] bg-[#FDFDFD] p-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#74777F]">Step {index + 1}</div>
+                <h3 className="mt-2 text-[16px] font-semibold leading-tight text-[#1A1C1E]">{item.step}</h3>
+                <p className="mt-2 text-[13px] font-medium text-[#1A1C1E]">{item.algo}</p>
+                <p className="mt-2 text-[13px] text-[#44474E]">{item.detail}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+    </>
   )
 }
 
 export function LandingFinalCtaSection() {
   return (
-    <section id="cta" className="landing-page__final relative overflow-hidden px-8 py-28 text-center text-white md:px-16" data-reveal>
-      <div className="mx-auto max-w-4xl">
-        <SectionKicker>Built for students</SectionKicker>
-        <h2 className="font-headline text-[clamp(40px,5vw,66px)] font-bold tracking-[-0.03em]">
-          Plan with clarity.
-          <br />
-          Execute with approval.
-        </h2>
-        <p className="mx-auto mt-5 max-w-2xl text-[17px] text-white/75">
-          Open the app, review proposed blocks, and approve only the actions you want executed.
-        </p>
-        <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-          <Link to={LANDING_ROUTES.app} className="landing-page__btn-primary">
-            Start with Donna
-          </Link>
-          <a href={LANDING_ANCHORS.preview} className="landing-page__btn-ghost landing-page__btn-ghost--dark">
-            See planned-day preview
-          </a>
+    <>
+      <SectionDivider />
+      <section id="cta" className="landing-page__final relative overflow-hidden px-8 py-24 text-center text-white md:px-16" data-reveal>
+        <div className="mx-auto max-w-4xl">
+          <SectionKicker>OPEN</SectionKicker>
+          <h2 className="font-headline text-[clamp(28px,3.2vw,44px)] font-bold tracking-[-0.03em]">
+            Enjoy college life while Donna handles your academic planning.
+          </h2>
+          <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+            <Link to={LANDING_ROUTES.app} className="landing-page__btn-primary">
+              LIVE APP
+            </Link>
+            <a href={LANDING_ROUTES.github} className="landing-page__btn-ghost landing-page__btn-ghost--dark" target="_blank" rel="noreferrer">
+              GITHUB
+            </a>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </>
   )
 }

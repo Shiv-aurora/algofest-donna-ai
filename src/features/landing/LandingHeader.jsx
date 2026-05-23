@@ -3,10 +3,10 @@ import { Link } from 'react-router-dom'
 import { LANDING_ANCHORS, LANDING_ROUTES } from './landingLinks'
 
 const NAV_ITEMS = [
-  { label: 'How it works', href: LANDING_ANCHORS.how },
-  { label: 'Features', href: LANDING_ANCHORS.features },
-  { label: 'Product', href: LANDING_ANCHORS.preview },
-  { label: 'Trust', href: LANDING_ANCHORS.trust }
+  { label: 'Thesis', href: LANDING_ANCHORS.thesis },
+  { label: 'Architecture', href: LANDING_ANCHORS.architecture },
+  { label: 'Algorithms', href: LANDING_ANCHORS.algorithms },
+  { label: 'Benchmarks', href: LANDING_ANCHORS.benchmarks }
 ]
 
 function LandingHeader() {

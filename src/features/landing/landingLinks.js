@@ -1,12 +1,15 @@
 export const LANDING_ANCHORS = {
-  how: '#how',
-  features: '#features',
-  preview: '#preview',
-  trust: '#trust',
+  thesis: '#thesis',
+  architecture: '#architecture',
+  algorithms: '#algorithms',
+  math: '#math',
+  benchmarks: '#benchmarks',
+  demoPath: '#demo-path',
   cta: '#cta'
 }
 
 export const LANDING_ROUTES = {
   app: '/dashboard',
-  home: '/'
+  home: '/',
+  github: 'https://github.com/Shiv-aurora/algofest-donna-ai'
 }
