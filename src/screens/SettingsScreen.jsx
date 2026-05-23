@@ -64,7 +64,10 @@ function SettingsScreen() {
 
   const [draftProfile, setDraftProfile] = useState({ name: profile.name, email: profile.email })
   const [draftSettings, setDraftSettings] = useState(settings)
-  const [blackboardDomain, setBlackboardDomain] = useState(connectivityStatus.blackboard?.institutionDomain || '')
+  const [canvasLink, setCanvasLink] = useState(connectivityStatus.canvas?.sourceUrl || '')
+  const [blackboardLink, setBlackboardLink] = useState(connectivityStatus.blackboard?.sourceUrl || '')
+  const [canvasCourseHint, setCanvasCourseHint] = useState(connectivityStatus.canvas?.courseHint || '')
+  const [blackboardCourseHint, setBlackboardCourseHint] = useState(connectivityStatus.blackboard?.courseHint || '')
   const [statusMessage, setStatusMessage] = useState('')
   const sessionLabel =
     userMode === 'google' ? 'Google Account' : userMode === 'guest' ? 'Guest Session' : 'Demo Session'
@@ -145,14 +148,24 @@ function SettingsScreen() {
 
   const connectHandler = async (provider) => {
     const payload =
-      provider === 'blackboard'
-        ? {
-            institutionDomain: blackboardDomain
-          }
+      provider === 'canvas'
+        ? { mode: 'ics_link', sourceUrl: canvasLink, courseHint: canvasCourseHint }
+        : provider === 'blackboard'
+        ? { mode: 'ics_link', sourceUrl: blackboardLink, courseHint: blackboardCourseHint }
         : {}
     const ok = await connectProvider(provider, payload)
     const label = normalizeProviderLabel(provider)
     setStatusMessage(ok ? `${label} connected.` : `${label} connection failed.`)
+  }
+
+  const testLmsLink = async (provider) => {
+    const payload =
+      provider === 'canvas'
+        ? { mode: 'ics_link', sourceUrl: canvasLink, courseHint: canvasCourseHint, testOnly: true }
+        : { mode: 'ics_link', sourceUrl: blackboardLink, courseHint: blackboardCourseHint, testOnly: true }
+    const ok = await connectProvider(provider, payload)
+    const label = normalizeProviderLabel(provider)
+    setStatusMessage(ok ? `${label} link looks valid.` : `${label} link validation failed.`)
   }
 
   const disconnectHandler = async (provider) => {
@@ -336,47 +349,67 @@ function SettingsScreen() {
                 </div>
 
                 <h4 className="text-xs uppercase tracking-widest text-on-surface-variant mb-3">LMS Connectivity</h4>
-                <div className="relative mb-6">
-                  <div className="space-y-4 blur-[2px] opacity-70 pointer-events-none select-none" aria-hidden="true">
+                <div className="space-y-4 mb-6">
+                  <div className="bg-surface-container-low rounded-xl p-4">
+                    <h5 className="text-sm font-medium mb-1">Canvas via ICS Link</h5>
+                    <p className="text-xs text-on-surface-variant mb-3">Paste your Canvas calendar feed link.</p>
+                    <div className="flex gap-2 mb-2">
+                      <input
+                        className="flex-1 rounded-lg border-none bg-surface-container-lowest px-3 py-2 text-xs focus:ring-1 focus:ring-primary/20"
+                        placeholder="webcal://... or https://... (Canvas feed)"
+                        value={canvasLink}
+                        onChange={(event) => setCanvasLink(event.target.value)}
+                      />
+                      <button className="px-3 py-2 rounded-lg text-xs bg-surface-container-highest" onClick={() => testLmsLink('canvas')}>
+                        Test Link
+                      </button>
+                    </div>
+                    <input
+                      className="w-full rounded-lg border-none bg-surface-container-lowest px-3 py-2 text-xs focus:ring-1 focus:ring-primary/20 mb-3"
+                      placeholder="Optional course label (e.g., Econ 201)"
+                      value={canvasCourseHint}
+                      onChange={(event) => setCanvasCourseHint(event.target.value)}
+                    />
                     <ProviderRow
                       title="Canvas LMS"
-                      subtitle="Academic LMS connector"
+                      subtitle={`Imported tasks: ${connectivity.canvas?.importedTasks || 0} · events: ${connectivity.canvas?.importedEvents || 0}`}
                       providerKey="canvas"
                       providerState={connectivity.canvas}
                       onConnect={connectHandler}
                       onDisconnect={disconnectHandler}
                       onSync={syncHandler}
                     />
-                    <div className="bg-surface-container-low rounded-xl p-4">
-                      <div className="mb-3">
-                        <h5 className="text-sm font-medium">Blackboard LMS</h5>
-                        <p className="text-xs text-on-surface-variant">
-                          Institution domain is required for Blackboard connection.
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <input
-                          className="flex-1 rounded-lg border-none bg-surface-container-lowest px-3 py-2 text-xs focus:ring-1 focus:ring-primary/20"
-                          placeholder="Institution domain (e.g. university.blackboard.com)"
-                          value={blackboardDomain}
-                          onChange={(event) => setBlackboardDomain(event.target.value)}
-                        />
-                      </div>
-                      <ProviderRow
-                        title="Blackboard LMS"
-                        subtitle="Blackboard integration status"
-                        providerKey="blackboard"
-                        providerState={connectivity.blackboard}
-                        onConnect={connectHandler}
-                        onDisconnect={disconnectHandler}
-                        onSync={syncHandler}
-                      />
-                    </div>
                   </div>
-                  <div className="absolute inset-0 rounded-xl border border-outline-variant/20 bg-surface/30 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
-                    <span className="text-[11px] uppercase tracking-[0.2em] text-on-surface-variant font-medium">
-                      Coming Soon
-                    </span>
+
+                  <div className="bg-surface-container-low rounded-xl p-4">
+                    <h5 className="text-sm font-medium mb-1">Blackboard via ICS Link</h5>
+                    <p className="text-xs text-on-surface-variant mb-3">Paste your Blackboard calendar feed link.</p>
+                    <div className="flex gap-2 mb-2">
+                      <input
+                        className="flex-1 rounded-lg border-none bg-surface-container-lowest px-3 py-2 text-xs focus:ring-1 focus:ring-primary/20"
+                        placeholder="webcal://... or https://... (Blackboard feed)"
+                        value={blackboardLink}
+                        onChange={(event) => setBlackboardLink(event.target.value)}
+                      />
+                      <button className="px-3 py-2 rounded-lg text-xs bg-surface-container-highest" onClick={() => testLmsLink('blackboard')}>
+                        Test Link
+                      </button>
+                    </div>
+                    <input
+                      className="w-full rounded-lg border-none bg-surface-container-lowest px-3 py-2 text-xs focus:ring-1 focus:ring-primary/20 mb-3"
+                      placeholder="Optional course label (e.g., CS 220)"
+                      value={blackboardCourseHint}
+                      onChange={(event) => setBlackboardCourseHint(event.target.value)}
+                    />
+                    <ProviderRow
+                      title="Blackboard LMS"
+                      subtitle={`Imported tasks: ${connectivity.blackboard?.importedTasks || 0} · events: ${connectivity.blackboard?.importedEvents || 0}`}
+                      providerKey="blackboard"
+                      providerState={connectivity.blackboard}
+                      onConnect={connectHandler}
+                      onDisconnect={disconnectHandler}
+                      onSync={syncHandler}
+                    />
                   </div>
                 </div>
 

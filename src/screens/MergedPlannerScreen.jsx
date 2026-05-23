@@ -527,6 +527,9 @@ function MergedPlannerScreen() {
                                       </span>
                                       {item.estimatedHours}h Est.
                                     </span>
+                                    <span className="inline-block rounded-full px-2 py-0.5 text-[10px] bg-surface-container-highest text-on-surface">
+                                      {String(item.source || 'manual').toUpperCase()}
+                                    </span>
                                   </div>
                                 </div>
                                 <div className="text-right space-y-2">

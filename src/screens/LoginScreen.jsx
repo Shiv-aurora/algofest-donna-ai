@@ -113,12 +113,14 @@ function LoginScreen() {
 
         <div className="space-y-3">
           <button
-            onClick={continueWithGoogle}
+            onClick={continueAsDemo}
             disabled={loading || Boolean(submitting)}
-            className="w-full rounded-full bg-on-surface text-surface px-4 py-3 text-sm disabled:opacity-60"
+            className="w-full rounded-2xl bg-primary-container text-on-primary-container px-4 py-4 text-base font-semibold disabled:opacity-60"
           >
-            {submitting === 'google' ? 'Redirecting to Google...' : 'Continue with Google'}
+            {submitting === 'demo' ? 'Opening demo...' : 'Explore Demo'}
           </button>
+          <p className="-mt-2 px-2 text-xs text-on-surface-variant">Pre-seeded data</p>
+
           <button
             onClick={continueAsGuest}
             disabled={loading || Boolean(submitting)}
@@ -126,13 +128,16 @@ function LoginScreen() {
           >
             {submitting === 'guest' ? 'Starting guest session...' : 'Continue as Guest'}
           </button>
+          <p className="-mt-2 px-2 text-xs text-on-surface-variant">Requires onboarding</p>
+
           <button
-            onClick={continueAsDemo}
+            onClick={continueWithGoogle}
             disabled={loading || Boolean(submitting)}
-            className="w-full rounded-full bg-primary-container text-on-primary-container px-4 py-3 text-sm disabled:opacity-60"
+            className="w-full rounded-full bg-on-surface text-surface px-4 py-3 text-sm disabled:opacity-60"
           >
-            {submitting === 'demo' ? 'Opening demo...' : 'Explore Demo'}
+            {submitting === 'google' ? 'Redirecting to Google...' : 'Continue with Google'}
           </button>
+          <p className="-mt-2 px-2 text-xs text-on-surface-variant">Requires onboarding</p>
         </div>
 
         {errorMessage && (

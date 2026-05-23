@@ -143,6 +143,32 @@ export function syncProviderApi(provider) {
   })
 }
 
+export function connectLmsApi(payload = {}) {
+  return request('/api/connectivity/lms/connect', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
+}
+
+export function syncLmsApi(payload = {}) {
+  return request('/api/connectivity/lms/sync', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
+}
+
+export function getLmsStatusApi(provider = '') {
+  const qs = provider ? `?provider=${encodeURIComponent(provider)}` : ''
+  return request(`/api/connectivity/lms/status${qs}`)
+}
+
+export function disconnectLmsApi(provider) {
+  return request('/api/connectivity/lms/connect', {
+    method: 'DELETE',
+    body: JSON.stringify({ provider })
+  })
+}
+
 export function getAuthMe() {
   return request('/api/auth/me')
 }
@@ -205,4 +231,50 @@ export function runDonnaPlannerApi(payload = {}) {
 
 export function getDonnaPlannerUsage() {
   return request('/api/donna/planner/usage')
+}
+
+export function ingestSyllabusV2(payload) {
+  return request('/api/v2/syllabus/ingest', {
+    method: 'POST',
+    body: JSON.stringify(payload || {})
+  })
+}
+
+export function solvePlanV2(payload) {
+  return request('/api/v2/plan/solve', {
+    method: 'POST',
+    body: JSON.stringify(payload || {})
+  })
+}
+
+export function feasibilityPlanV2(payload) {
+  return request('/api/v2/plan/feasibility', {
+    method: 'POST',
+    body: JSON.stringify(payload || {})
+  })
+}
+
+export function reoptimizePlanV2(payload) {
+  return request('/api/v2/plan/reoptimize', {
+    method: 'POST',
+    body: JSON.stringify(payload || {})
+  })
+}
+
+export function notifyDecisionV2(payload) {
+  return request('/api/v2/notify/decision', {
+    method: 'POST',
+    body: JSON.stringify(payload || {})
+  })
+}
+
+export function benchmarkMetricsV2() {
+  return request('/api/v2/metrics/benchmark')
+}
+
+export function logWorkEventV2(payload) {
+  return request('/api/v2/events/work', {
+    method: 'POST',
+    body: JSON.stringify(payload || {})
+  })
 }
