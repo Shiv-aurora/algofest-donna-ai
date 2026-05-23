@@ -1,0 +1,20 @@
+{
+  "generated_at": "2026-05-21T19:44:20.588709+00:00",
+  "turns": 100,
+  "v1_success": 0,
+  "v2_success": 100,
+  "token_baseline": {
+    "v1_per_turn": 0.0,
+    "v2_small": 13.0,
+    "ratio_v1_over_v2": 0.0
+  },
+  "cost_estimate": {
+    "usd_per_1k_turns_baseline": 0.0,
+    "usd_per_1k_turns_v2": 0.0052,
+    "pricing": {
+      "input_per_1k": 0.0002,
+      "output_per_1k": 0.0002
+    }
+  },
+  "verification_flag": "MEASURED, NOT HARDCODED"
+}
