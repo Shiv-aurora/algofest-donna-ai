@@ -29,9 +29,7 @@ function validateConfig(config) {
   const errors = []
   const isProduction = config.nodeEnv === 'production'
 
-  if (!config.sessionSecret) {
-    errors.push('SESSION_SECRET is required.')
-  } else if (isProduction && config.sessionSecret.length < 32) {
+  if (isProduction && config.sessionSecret.length < 32) {
     errors.push('SESSION_SECRET must be at least 32 characters in production.')
   }
 
@@ -57,13 +55,8 @@ function validateConfig(config) {
     errors.push('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must both be set together.')
   }
 
-  if (isProduction && (!config.google.clientId || !config.google.clientSecret)) {
-    errors.push('Google OAuth must be configured in production.')
-  }
-
-  if (isProduction && !config.redisUrl) {
-    errors.push('REDIS_URL is required in production.')
-  }
+  // In production, Google OAuth and Redis are optional for hackathon/demo deployments.
+  // OAuth routes and Redis-backed sessions are enabled only when those env vars are present.
 
   if (config.ops?.metricsKey && config.ops.metricsKey.length < 24) {
     errors.push('OPS_METRICS_KEY must be at least 24 characters when set.')
@@ -127,9 +120,7 @@ export function loadEnv() {
   const freeIpHourlyLimit = parseNumber(process.env.FREE_GROQ_IP_HOURLY_LIMIT, 50)
   const freeUserDailyMessages = parseNumber(process.env.FREE_GROQ_USER_DAILY_MESSAGES, 10)
   const freeUserWeeklyTokens = parseNumber(process.env.FREE_GROQ_USER_WEEKLY_TOKENS, 75000)
-  const sessionSecret = String(
-    process.env.SESSION_SECRET || (isProduction ? '' : `donna-dev-${crypto.randomUUID()}-${Date.now()}`)
-  )
+  const sessionSecret = String(process.env.SESSION_SECRET || `donna-${nodeEnv}-${crypto.randomUUID()}-${Date.now()}`)
   const redisUrl = String(process.env.REDIS_URL || '').trim()
   const trustProxy = String(process.env.TRUST_PROXY || '').trim()
   const opsMetricsKey = String(process.env.OPS_METRICS_KEY || '').trim()

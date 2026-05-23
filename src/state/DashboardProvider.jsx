@@ -438,6 +438,39 @@ function removeScopedStorage(baseKey, scope) {
   localStorage.removeItem(scopedStorageKey(baseKey, scope))
 }
 
+function writeScopedStorage(baseKey, scope, value) {
+  if (!scope) return
+  const key = scopedStorageKey(baseKey, scope)
+  try {
+    localStorage.setItem(key, value)
+    return
+  } catch (error) {
+    const isQuotaError =
+      error?.name === 'QuotaExceededError' ||
+      error?.code === 22 ||
+      error?.code === 1014 ||
+      /quota/i.test(String(error?.message || ''))
+    if (!isQuotaError) return
+  }
+
+  try {
+    // Best-effort cleanup of heavy cached payloads before retrying.
+    const pruneKeys = [
+      STORAGE_KEYS.chat,
+      STORAGE_KEYS.focusHistory,
+      STORAGE_KEYS.insightDesk,
+      STORAGE_KEYS.aspirationsArchive
+    ]
+    for (const candidate of pruneKeys) {
+      if (candidate === baseKey) continue
+      localStorage.removeItem(scopedStorageKey(candidate, scope))
+    }
+    localStorage.setItem(key, value)
+  } catch {
+    // no-op: keep runtime alive even when storage is full/unavailable
+  }
+}
+
 function writeScopedSessionStorage(baseKey, scope, value) {
   if (!scope) return
   try {
@@ -724,10 +757,21 @@ export function DashboardProvider({ children }) {
       }
     }
 
-    return {
+    const result = {
       ...hydratedState,
       onboardingCompleted: readBooleanStorage(onboardingRaw, Boolean(fallback.onboardingCompleted))
     }
+
+    // Demo calendar events are date-anchored to the current week at module load time.
+    // Stored events from a previous session will have stale date keys that don't match
+    // the current week, causing a blank calendar. Always use fresh defaults for demo
+    // and evict the stale stored copy so it doesn't persist across sessions.
+    if (mode === 'demo') {
+      result.calendarEvents = fallback.calendarEvents
+      removeScopedStorage(STORAGE_KEYS.calendarEvents, scope)
+    }
+
+    return result
   }, [])
 
   const unreadInsightCount = useMemo(
@@ -794,100 +838,88 @@ export function DashboardProvider({ children }) {
   useEffect(() => {
     providerModeRef.current = providerMode === 'local_ollama' ? 'local_ollama' : 'groq'
     if (!storageScope) return
-    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.providerMode, storageScope), JSON.stringify(providerModeRef.current))
+    writeScopedStorage(STORAGE_KEYS.providerMode, storageScope, JSON.stringify(providerModeRef.current))
   }, [providerMode, storageScope])
 
   useEffect(() => {
     localModelRef.current = String(localModel || '').trim()
     if (!storageScope) return
-    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.localModel, storageScope), JSON.stringify(localModelRef.current))
+    writeScopedStorage(STORAGE_KEYS.localModel, storageScope, JSON.stringify(localModelRef.current))
   }, [localModel, storageScope])
 
   useEffect(() => {
     if (!storageScope) return
-    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.profile, storageScope), JSON.stringify(profile))
+    writeScopedStorage(STORAGE_KEYS.profile, storageScope, JSON.stringify(profile))
   }, [profile, storageScope])
 
   useEffect(() => {
     if (!storageScope) return
-    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.onboarding, storageScope), JSON.stringify(onboardingCompleted))
+    writeScopedStorage(STORAGE_KEYS.onboarding, storageScope, JSON.stringify(onboardingCompleted))
   }, [onboardingCompleted, storageScope])
 
   useEffect(() => {
     if (!storageScope) return
-    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.dashboard, storageScope), JSON.stringify(dashboard))
+    writeScopedStorage(STORAGE_KEYS.dashboard, storageScope, JSON.stringify(dashboard))
   }, [dashboard, storageScope])
 
   useEffect(() => {
     if (!storageScope) return
-    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.chat, storageScope), JSON.stringify(chatMessages))
+    writeScopedStorage(STORAGE_KEYS.chat, storageScope, JSON.stringify(chatMessages))
   }, [chatMessages, storageScope])
 
   useEffect(() => {
     if (!storageScope) return
-    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.focusHistory, storageScope), JSON.stringify(focusHistory))
+    writeScopedStorage(STORAGE_KEYS.focusHistory, storageScope, JSON.stringify(focusHistory))
   }, [focusHistory, storageScope])
 
   useEffect(() => {
     if (!storageScope) return
-    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.aspirations, storageScope), JSON.stringify(aspirations))
+    writeScopedStorage(STORAGE_KEYS.aspirations, storageScope, JSON.stringify(aspirations))
   }, [aspirations, storageScope])
 
   useEffect(() => {
     if (!storageScope) return
-    localStorage.setItem(
-      scopedStorageKey(STORAGE_KEYS.aspirationsArchive, storageScope),
-      JSON.stringify(aspirationsArchive)
-    )
+    writeScopedStorage(STORAGE_KEYS.aspirationsArchive, storageScope, JSON.stringify(aspirationsArchive))
   }, [aspirationsArchive, storageScope])
 
   useEffect(() => {
     if (!storageScope) return
-    localStorage.setItem(
-      scopedStorageKey(STORAGE_KEYS.aspirationSessions, storageScope),
-      JSON.stringify(aspirationSessions)
-    )
+    writeScopedStorage(STORAGE_KEYS.aspirationSessions, storageScope, JSON.stringify(aspirationSessions))
   }, [aspirationSessions, storageScope])
 
   useEffect(() => {
     if (!storageScope) return
-    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.settings, storageScope), JSON.stringify(settings))
+    writeScopedStorage(STORAGE_KEYS.settings, storageScope, JSON.stringify(settings))
   }, [settings, storageScope])
 
   useEffect(() => {
     if (!storageScope) return
-    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.insightDesk, storageScope), JSON.stringify(insightDesk))
+    writeScopedStorage(STORAGE_KEYS.insightDesk, storageScope, JSON.stringify(insightDesk))
   }, [insightDesk, storageScope])
 
   useEffect(() => {
     if (!storageScope) return
-    localStorage.setItem(
-      scopedStorageKey(STORAGE_KEYS.connectivityStatus, storageScope),
-      JSON.stringify(connectivityStatus)
-    )
+    writeScopedStorage(STORAGE_KEYS.connectivityStatus, storageScope, JSON.stringify(connectivityStatus))
   }, [connectivityStatus, storageScope])
 
   useEffect(() => {
     if (!storageScope) return
-    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.calendarEvents, storageScope), JSON.stringify(calendarEvents))
+    writeScopedStorage(STORAGE_KEYS.calendarEvents, storageScope, JSON.stringify(calendarEvents))
   }, [calendarEvents, storageScope])
 
   useEffect(() => {
     if (!storageScope) return
-    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.assignments, storageScope), JSON.stringify(assignments))
+    writeScopedStorage(STORAGE_KEYS.assignments, storageScope, JSON.stringify(assignments))
   }, [assignments, storageScope])
 
   useEffect(() => {
     if (!storageScope) return
-    localStorage.setItem(scopedStorageKey(STORAGE_KEYS.exams, storageScope), JSON.stringify(exams))
+    writeScopedStorage(STORAGE_KEYS.exams, storageScope, JSON.stringify(exams))
   }, [exams, storageScope])
 
   useEffect(() => {
     if (!storageScope) return
-    localStorage.setItem(
-      scopedStorageKey(STORAGE_KEYS.examStudySessions, storageScope),
-      JSON.stringify(examStudySessions)
-    )
+    writeScopedStorage(STORAGE_KEYS.examStudySessions, storageScope, JSON.stringify(examStudySessions))
   }, [examStudySessions, storageScope])
 
   useEffect(() => {
@@ -1806,25 +1838,23 @@ export function DashboardProvider({ children }) {
           }))
         }
 
-        let plannerResult
-        if (routeDecision.route === 'local') {
-          plannerResult = runLocalPlanner(dashboard, trimmed, source)
-        } else {
-          plannerResult = await runDonnaPlannerApi({
-            request: plannerRequest,
-            route: routeDecision.route,
-            source,
-            apiKey: apiKeyRef.current || undefined,
-            providerMode: providerModeRef.current,
-            localModel: localModelRef.current || undefined
+        // Prefer model-backed planning even for low-complexity prompts.
+        // Deterministic local planner is now reserved for hard failure fallback only.
+        const requestedRoute = routeDecision.route === 'local' ? 'small' : routeDecision.route
+        const plannerResult = await runDonnaPlannerApi({
+          request: plannerRequest,
+          route: requestedRoute,
+          source,
+          apiKey: apiKeyRef.current || undefined,
+          providerMode: providerModeRef.current,
+          localModel: localModelRef.current || undefined
+        })
+        if (plannerResult?.usage) {
+          setPlannerUsage({
+            ok: true,
+            eligibility: plannerResult?.eligibility || null,
+            ...(plannerResult.usage || {})
           })
-          if (plannerResult?.usage) {
-            setPlannerUsage({
-              ok: true,
-              eligibility: plannerResult?.eligibility || null,
-              ...(plannerResult.usage || {})
-            })
-          }
         }
 
         setV2PlannerMeta({
