@@ -30,6 +30,8 @@ export const STORAGE_KEYS = {
   chat: 'donna.chatHistory',
   focusHistory: 'donna.focusHistory',
   apiKey: 'donna.apiKey',
+  providerMode: 'donna.providerMode',
+  localModel: 'donna.localModel',
   aspirations: 'donna.aspirations',
   aspirationsArchive: 'donna.aspirationsArchive',
   settings: 'donna.settings',
@@ -392,7 +394,13 @@ export const DEFAULT_CONNECTIVITY_STATUS = {
     lastSyncAt: null,
     status: 'idle',
     errorMessage: '',
-    institutionDomain: ''
+    institutionDomain: '',
+    mode: 'ics_link',
+    sourceUrl: '',
+    courseHint: '',
+    importedTasks: 0,
+    importedEvents: 0,
+    lastError: ''
   },
   blackboard: {
     provider: 'blackboard',
@@ -400,7 +408,13 @@ export const DEFAULT_CONNECTIVITY_STATUS = {
     lastSyncAt: null,
     status: 'idle',
     errorMessage: '',
-    institutionDomain: ''
+    institutionDomain: '',
+    mode: 'ics_link',
+    sourceUrl: '',
+    courseHint: '',
+    importedTasks: 0,
+    importedEvents: 0,
+    lastError: ''
   },
   googleCalendar: {
     provider: 'googleCalendar',
@@ -553,6 +567,8 @@ export function getModeDefaults(mode = 'demo') {
       chat: DEFAULT_CHAT_MESSAGES,
       focusHistory: [],
       apiKey: '',
+      providerMode: 'groq',
+      localModel: '',
       aspirations: DEFAULT_ASPIRATIONS,
       aspirationsArchive: [],
       aspirationSessions: DEFAULT_ASPIRATION_SESSIONS,
@@ -573,6 +589,8 @@ export function getModeDefaults(mode = 'demo') {
     chat: MINIMAL_CHAT_MESSAGES,
     focusHistory: [],
     apiKey: '',
+    providerMode: 'groq',
+    localModel: '',
     aspirations: MINIMAL_ASPIRATIONS,
     aspirationsArchive: [],
     aspirationSessions: MINIMAL_ASPIRATION_SESSIONS,
@@ -604,35 +622,115 @@ function rankValue(priority) {
   return priority.impact * 0.65 + priority.urgency * 0.35 + completionPenalty
 }
 
-export function computeFocusTarget(state) {
-  const priorities = state.priorities
-  const completed = priorities.filter((item) => item.completed).length
-  const pending = priorities.length - completed
-  const overduePressure = state.focusAssignments.title ? 1 : 0
-  const pausePenalty = state.session.isPaused ? 6 : 0
-
-  const value =
-    72 +
-    completed * 9 -
-    pending * 2 -
-    state.metrics.contextSwitches * 2 -
-    overduePressure * 3 -
-    pausePenalty +
-    Math.max(0, 4 - state.metrics.replanCount)
-
-  return clamp(Math.round(value))
+function toFiniteNumber(value, fallback = 0) {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : fallback
 }
 
-export function buildFocusReason(state, targetScore) {
+function daysUntil(isoLike) {
+  const timestamp = Date.parse(String(isoLike || ''))
+  if (!Number.isFinite(timestamp)) return null
+  return (timestamp - Date.now()) / (1000 * 60 * 60 * 24)
+}
+
+function rollingAverage(values = []) {
+  if (!Array.isArray(values) || values.length === 0) return null
+  const finite = values.map((value) => toFiniteNumber(value, NaN)).filter((value) => Number.isFinite(value))
+  if (finite.length === 0) return null
+  return finite.reduce((sum, value) => sum + value, 0) / finite.length
+}
+
+function buildFocusFeatures(state, context = {}) {
+  const priorities = Array.isArray(state.priorities) ? state.priorities : []
+  const completed = priorities.filter((item) => item.completed).length
+  const completionRatio = priorities.length > 0 ? completed / priorities.length : 0.5
+
+  const assignments = Array.isArray(context.assignments) ? context.assignments : []
+  const exams = Array.isArray(context.exams) ? context.exams : []
+  const calendarEvents = Array.isArray(context.calendarEvents) ? context.calendarEvents : []
+  const focusHistory = Array.isArray(context.focusHistory) ? context.focusHistory : []
+
+  let nearTermHours = 0
+  let overdueHours = 0
+  for (const assignment of assignments) {
+    const dueInDays = daysUntil(assignment?.dueAt)
+    const hours = Math.max(0, toFiniteNumber(assignment?.estimatedHours, 1))
+    if (dueInDays === null) continue
+    if (dueInDays < 0) overdueHours += hours
+    if (dueInDays <= 2) nearTermHours += hours
+  }
+
+  let examPressure = 0
+  for (const exam of exams) {
+    const dueInDays = daysUntil(exam?.date)
+    if (dueInDays === null) continue
+    if (dueInDays <= 3) examPressure += 1
+  }
+
+  const dailyEventLoad = Math.min(calendarEvents.length / 8, 1)
+  const sessionMinutes = Math.max(0, Math.ceil(toFiniteNumber(state.session?.remainingSeconds, 0) / 60))
+  const pausedPenalty = state.session?.isPaused ? 1 : 0
+  const contextSwitchLoad = Math.min(toFiniteNumber(state.metrics?.contextSwitches, 0) / 8, 1)
+  const replanLoad = Math.min(toFiniteNumber(state.metrics?.replanCount, 0) / 8, 1)
+  const overdueLoad = Math.min(overdueHours / 6, 1)
+  const nearTermLoad = Math.min(nearTermHours / 8, 1)
+  const examLoad = Math.min(examPressure / 3, 1)
+
+  const recentScores = focusHistory.slice(-10).map((entry) => toFiniteNumber(entry?.score, NaN))
+  const baselineAverage = rollingAverage(recentScores)
+  const trend =
+    recentScores.length >= 2
+      ? Math.max(-1, Math.min(1, (recentScores[recentScores.length - 1] - recentScores[0]) / 20))
+      : 0
+
+  return {
+    completionRatio,
+    dailyEventLoad,
+    sessionMinutes,
+    pausedPenalty,
+    contextSwitchLoad,
+    replanLoad,
+    overdueLoad,
+    nearTermLoad,
+    examLoad,
+    baselineAverage,
+    trend
+  }
+}
+
+export function computeFocusTarget(state, context = {}) {
+  const features = buildFocusFeatures(state, context)
+  const momentumBoost = features.sessionMinutes > 0 && !features.pausedPenalty ? 0.06 : 0
+
+  const normalized =
+    0.52 +
+    features.completionRatio * 0.28 +
+    momentumBoost +
+    features.trend * 0.1 -
+    features.overdueLoad * 0.23 -
+    features.nearTermLoad * 0.16 -
+    features.examLoad * 0.08 -
+    features.dailyEventLoad * 0.1 -
+    features.contextSwitchLoad * 0.1 -
+    features.replanLoad * 0.08 -
+    features.pausedPenalty * 0.1
+
+  const calibrated = clamp(Math.round(normalized * 100))
+  if (features.baselineAverage === null) return calibrated
+  return clamp(Math.round(calibrated * 0.7 + features.baselineAverage * 0.3))
+}
+
+export function buildFocusReason(state, targetScore, context = {}) {
+  const features = buildFocusFeatures(state, context)
   const reasons = []
-  const completed = state.priorities.filter((item) => item.completed).length
-
-  if (completed > 0) reasons.push('completed priority tasks')
-  if (state.metrics.contextSwitches <= 2) reasons.push('limited context switching')
-  if (state.session.isPaused) reasons.push('session is paused')
-  if (state.metrics.replanCount > 3) reasons.push('frequent replanning overhead')
-
-  if (reasons.length === 0) reasons.push('steady study cadence')
+  if (features.completionRatio >= 0.6) reasons.push('strong completion ratio')
+  if (features.overdueLoad > 0.2) reasons.push('overdue workload pressure')
+  if (features.nearTermLoad > 0.35) reasons.push('heavy 48-hour deadline load')
+  if (features.contextSwitchLoad <= 0.25) reasons.push('low context switching')
+  if (features.replanLoad > 0.5) reasons.push('frequent replanning overhead')
+  if (features.pausedPenalty) reasons.push('active session is paused')
+  if (Math.abs(features.trend) > 0.15) reasons.push(features.trend > 0 ? 'upward focus trend' : 'focus trend slipping')
+  if (reasons.length === 0) reasons.push('balanced workload cadence')
 
   return `Score ${targetScore}: ${reasons.join(', ')}.`
 }
@@ -641,10 +739,10 @@ export function smoothFocusScore(previous, target) {
   return clamp(Math.round(previous * 0.75 + target * 0.25))
 }
 
-export function recomputeFocusState(state, reasonHint = '') {
-  const target = computeFocusTarget(state)
+export function recomputeFocusState(state, reasonHint = '', context = {}) {
+  const target = computeFocusTarget(state, context)
   const score = smoothFocusScore(state.focus.score, target)
-  const reason = reasonHint || buildFocusReason(state, score)
+  const reason = reasonHint || buildFocusReason(state, score, context)
 
   return {
     ...state,
@@ -836,6 +934,8 @@ export function hydrateState({
   chatRaw,
   focusHistoryRaw,
   apiKeyRaw,
+  providerModeRaw,
+  localModelRaw,
   aspirationsRaw,
   aspirationsArchiveRaw,
   aspirationSessionsRaw,
@@ -852,6 +952,8 @@ export function hydrateState({
   const chat = safeParse(chatRaw, DEFAULT_CHAT_MESSAGES)
   const focusHistory = safeParse(focusHistoryRaw, [])
   const apiKey = String(apiKeyRaw || '').trim()
+  const providerMode = String(providerModeRaw || 'groq').trim() === 'local_ollama' ? 'local_ollama' : 'groq'
+  const localModel = String(localModelRaw || '').trim()
   const aspirations = safeParse(aspirationsRaw, DEFAULT_ASPIRATIONS)
   const aspirationsArchive = safeParse(aspirationsArchiveRaw, [])
   const aspirationSessions = safeParse(aspirationSessionsRaw, DEFAULT_ASPIRATION_SESSIONS)
@@ -872,6 +974,8 @@ export function hydrateState({
     chat: Array.isArray(chat) && chat.length > 0 ? chat : DEFAULT_CHAT_MESSAGES,
     focusHistory: Array.isArray(focusHistory) ? focusHistory : [],
     apiKey,
+    providerMode,
+    localModel,
     aspirations: Array.isArray(aspirations) ? aspirations : DEFAULT_ASPIRATIONS,
     aspirationsArchive: Array.isArray(aspirationsArchive) ? aspirationsArchive : [],
     aspirationSessions: Array.isArray(aspirationSessions) ? aspirationSessions : DEFAULT_ASPIRATION_SESSIONS,
