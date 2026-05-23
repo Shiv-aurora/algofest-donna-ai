@@ -1,6 +1,6 @@
 import React from 'react'
 import PromptInputBox from './ai-prompt-box'
-import DashboardClockBackground from '../../../background'
+import DashboardClockBackground from '../../background'
 
 function DashboardClockAi({ onAskDonna, isLoading = false }) {
   return (

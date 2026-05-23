@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useDashboard } from '../state/DashboardProvider'
-import DashboardClockBackground from '../../background'
+import DashboardClockBackground from '../background'
 
 const MotionButton = motion.button
 const MotionPanel = motion.div
