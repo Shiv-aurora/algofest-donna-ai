@@ -31,14 +31,14 @@ export function createCsrfProtection(config) {
 
     const origin = String(req.get('origin') || '').trim()
     const referer = String(req.get('referer') || '').trim()
-    const expectedOrigin = config.frontendOrigin
-    if (origin && origin !== expectedOrigin) {
+    const allowed = Array.isArray(config.allowedOrigins) ? config.allowedOrigins : [config.frontendOrigin]
+    if (origin && !allowed.includes(origin)) {
       return next(new HttpError('CSRF validation failed.', 403, { reasonCode: 'csrf_invalid_origin' }))
     }
     if (!origin && referer) {
       try {
         const refererOrigin = new URL(referer).origin
-        if (refererOrigin !== expectedOrigin) {
+        if (!allowed.includes(refererOrigin)) {
           return next(new HttpError('CSRF validation failed.', 403, { reasonCode: 'csrf_invalid_origin' }))
         }
       } catch {
