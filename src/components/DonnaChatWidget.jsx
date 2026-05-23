@@ -16,8 +16,17 @@ function DonnaChatWidget() {
     plannerUsage,
     plannerUsageLoading,
     hasApiKey,
+    providerMode,
+    localModel,
     refreshPlannerUsage,
     runPlanner,
+    runFeasibilityQuery,
+    refreshV2Benchmarks,
+    v2PlannerMeta,
+    v2Feasibility,
+    v2Forecast,
+    v2EstimateBands,
+    v2Benchmarks,
     donnaActions,
     donnaActionsLoading,
     donnaActionsError,
@@ -26,6 +35,8 @@ function DonnaChatWidget() {
     approveStudyBlockAction,
     proposeStudyBlockAction,
     setApiKeySession,
+    setProviderModeSession,
+    setLocalModelSession,
     clearApiKey,
     apiKeyEditorOpen,
     setApiKeyEditorOpen
@@ -33,16 +44,20 @@ function DonnaChatWidget() {
 
   const [draft, setDraft] = useState('')
   const [keyDraft, setKeyDraft] = useState('')
+  const [modelDraft, setModelDraft] = useState('')
   const [actionStatusMessage, setActionStatusMessage] = useState('')
+  const [feasibilityLoading, setFeasibilityLoading] = useState(false)
+  const [expanded, setExpanded] = useState(false)
 
   const statusText = useMemo(() => {
     if (sending) return 'Thinking...'
     if (authConnectivity?.state === 'connected_ready') return 'Calendar connected'
     if (authConnectivity?.state === 'unauthenticated') return 'Login required'
     if (authConnectivity?.state === 'authenticated_unconnected') return 'Connect Google Calendar'
+    if (providerMode === 'local_ollama') return 'Local server mode'
     if (hasApiKey) return 'BYOK connected'
-    return 'Local planner mode'
-  }, [authConnectivity?.state, hasApiKey, sending])
+    return 'Cloud planner mode'
+  }, [authConnectivity?.state, hasApiKey, providerMode, sending])
 
   const recentDonnaActions = useMemo(
     () =>
@@ -59,7 +74,14 @@ function DonnaChatWidget() {
     }
   }, [chatOpen, fetchDonnaActions, refreshPlannerUsage])
 
+  useEffect(() => {
+    if (apiKeyEditorOpen && providerMode === 'local_ollama') {
+      setModelDraft(localModel || 'gemma3:4b')
+    }
+  }, [apiKeyEditorOpen, localModel, providerMode])
+
   const quotaText = useMemo(() => {
+    if (providerMode === 'local_ollama') return 'Local mode active (Ollama/Gemma). Cloud quota not used.'
     if (plannerUsageLoading) return 'Loading quota...'
     if (!plannerUsage?.usage || !plannerUsage?.limits || !plannerUsage?.remaining) return ''
     if (plannerUsage?.eligibility?.requiresByok && !hasApiKey) {
@@ -71,7 +93,19 @@ function DonnaChatWidget() {
     const weeklyLeft = Math.max(0, Number(plannerUsage.remaining.userWeeklyTokens || 0)).toLocaleString()
     const weeklyTotal = Math.max(0, Number(plannerUsage.limits.userWeeklyTokens || 0)).toLocaleString()
     return `Free quota: ${dailyLeft}/${dailyTotal} msgs today · ${weeklyLeft}/${weeklyTotal} tokens this week`
-  }, [hasApiKey, plannerUsage, plannerUsageLoading])
+  }, [hasApiKey, plannerUsage, plannerUsageLoading, providerMode])
+
+  const trustText = useMemo(() => {
+    const rawRoute = String(v2PlannerMeta?.route || 'local')
+    const route = rawRoute === 'complex' ? 'strong' : rawRoute
+    const latency = Number(v2PlannerMeta?.latencyMs || 0)
+    const suffix = v2PlannerMeta?.fallback ? 'fallback' : 'live'
+    const provider = String(v2PlannerMeta?.providerUsed || providerMode || 'local_deterministic')
+      .replace('local_ollama', 'local-gemma')
+      .replace('local_deterministic', 'local-planner')
+    if (!latency) return `Provider: ${provider} · Route: ${route} · ${suffix}`
+    return `Provider: ${provider} · Route: ${route} · ${latency.toFixed(0)}ms · ${suffix}`
+  }, [providerMode, v2PlannerMeta])
 
   const toLocalTimeRange = (action) => {
     const start = action?.payload?.start ? new Date(action.payload.start) : null
@@ -102,6 +136,11 @@ function DonnaChatWidget() {
     setKeyDraft('')
   }
 
+  const saveLocalModel = () => {
+    setLocalModelSession(modelDraft || 'gemma3:4b')
+    setApiKeyEditorOpen(false)
+  }
+
   const handleApproveAction = async (action) => {
     if (!action?.id) return
     setActionStatusMessage('')
@@ -125,6 +164,33 @@ function DonnaChatWidget() {
       return
     }
     setActionStatusMessage(proposal?.message || 'Unable to re-propose study block.')
+  }
+
+  const handleFeasibility = async () => {
+    setFeasibilityLoading(true)
+    setActionStatusMessage('')
+    const result = await runFeasibilityQuery('Can I take Friday night off?')
+    if (!result?.ok) {
+      setActionStatusMessage('Feasibility check unavailable right now.')
+      setFeasibilityLoading(false)
+      return
+    }
+
+    const data = result.result
+    if (data?.feasible) {
+      setActionStatusMessage(`Feasible. Cost delta ${Number(data.cost_delta || 0).toFixed(2)}.`)
+    } else {
+      const conflict = Array.isArray(data?.minimal_conflict_set) ? data.minimal_conflict_set.join(' + ') : ''
+      setActionStatusMessage(
+        `Infeasible under current constraints. Cost delta ${Number(data?.cost_delta || 0).toFixed(2)}. ${conflict ? `Conflict set: ${conflict}` : 'Try relaxing one constraint.'}`
+      )
+    }
+    setFeasibilityLoading(false)
+  }
+
+  const handleLoadBenchmarks = async () => {
+    await refreshV2Benchmarks()
+    setActionStatusMessage('Benchmark snapshot refreshed.')
   }
 
   return (
@@ -159,7 +225,7 @@ function DonnaChatWidget() {
             animate={{ opacity: 1, y: 0, x: 0, scaleX: 1, scaleY: 1, filter: 'blur(0px)' }}
             exit={{ opacity: 0, y: 18, x: 12, scaleX: 0.9, scaleY: 0.82, filter: 'blur(4px)' }}
             transition={{ type: 'spring', stiffness: 350, damping: 30, mass: 0.75 }}
-            className="w-[360px] max-w-[92vw] rounded-2xl bg-surface-container-lowest ghost-border shadow-[0_24px_60px_rgba(43,52,55,0.16)] overflow-hidden"
+            className={`${expanded ? 'w-[640px] max-w-[96vw]' : 'w-[440px] max-w-[94vw]'} rounded-2xl bg-surface-container-lowest ghost-border shadow-[0_24px_60px_rgba(43,52,55,0.16)] overflow-hidden`}
           >
           <header className="flex items-center justify-between px-4 py-3 bg-surface-container-low border-b border-outline-variant/20">
             <div className="flex items-center gap-3">
@@ -167,14 +233,35 @@ function DonnaChatWidget() {
                 <p className="text-sm font-medium text-on-surface">Donna</p>
                 <p className="text-[10px] tracking-wide uppercase text-on-surface-variant">{statusText}</p>
                 {quotaText && <p className="text-[10px] text-on-surface-variant/80 mt-0.5">{quotaText}</p>}
+                <p className="text-[10px] text-on-surface-variant/70 mt-0.5">{trustText}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <button
+                onClick={() => setExpanded((value) => !value)}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors"
+                title={expanded ? 'Collapse panel' : 'Expand panel'}
+                aria-label={expanded ? 'Collapse panel' : 'Expand panel'}
+              >
+                <span className="material-symbols-outlined !text-[16px]">
+                  {expanded ? 'fullscreen_exit' : 'open_in_full'}
+                </span>
+              </button>
+              <select
+                value={providerMode}
+                onChange={(event) => setProviderModeSession(event.target.value)}
+                className="rounded-full bg-surface-container-high px-2 py-1 text-xs text-on-surface-variant outline-none"
+                title="LLM provider mode"
+                aria-label="LLM provider mode"
+              >
+                <option value="groq">Mode: Groq API</option>
+                <option value="local_ollama">Mode: Local Server</option>
+              </select>
+              <button
                 onClick={() => setApiKeyEditorOpen((value) => !value)}
                 className="text-xs px-2 py-1 rounded-full bg-surface-container-high text-on-surface-variant hover:text-primary transition-colors"
               >
-                API Key
+                {providerMode === 'local_ollama' ? 'Local Model' : 'API Key'}
               </button>
               <button
                 onClick={() => setChatOpen(false)}
@@ -188,116 +275,55 @@ function DonnaChatWidget() {
           {apiKeyEditorOpen && (
             <div className="px-4 py-3 bg-surface-container-low/70 border-b border-outline-variant/20 space-y-2">
               <p className="text-[11px] text-on-surface-variant">
-                BYOK key is stored locally in your profile on this device.
+                {providerMode === 'local_ollama'
+                  ? 'Local server mode uses Ollama on your machine. Set a Gemma model tag.'
+                  : 'BYOK key is stored locally in your profile on this device.'}
               </p>
               <div className="flex gap-2">
-                <input
-                  value={keyDraft}
-                  onChange={(event) => setKeyDraft(event.target.value)}
-                  type="password"
-                  placeholder="sk-..."
-                  className="flex-1 rounded-full border-none bg-surface-container-lowest px-3 py-2 text-xs focus:ring-1 focus:ring-primary/30"
-                />
-                <button
-                  onClick={saveApiKey}
-                  className="rounded-full bg-primary px-3 py-2 text-[11px] text-on-primary"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={clearApiKey}
-                  className="rounded-full bg-surface-container-high px-3 py-2 text-[11px] text-on-surface-variant"
-                >
-                  Clear
-                </button>
+                {providerMode === 'local_ollama' ? (
+                  <>
+                    <input
+                      value={modelDraft}
+                      onChange={(event) => setModelDraft(event.target.value)}
+                      type="text"
+                      placeholder={localModel || 'gemma3:4b'}
+                      className="flex-1 rounded-full border-none bg-surface-container-lowest px-3 py-2 text-xs focus:ring-1 focus:ring-primary/30"
+                    />
+                    <button
+                      onClick={saveLocalModel}
+                      className="rounded-full bg-primary px-3 py-2 text-[11px] text-on-primary"
+                    >
+                      Save
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <input
+                      value={keyDraft}
+                      onChange={(event) => setKeyDraft(event.target.value)}
+                      type="password"
+                      placeholder="sk-..."
+                      className="flex-1 rounded-full border-none bg-surface-container-lowest px-3 py-2 text-xs focus:ring-1 focus:ring-primary/30"
+                    />
+                    <button
+                      onClick={saveApiKey}
+                      className="rounded-full bg-primary px-3 py-2 text-[11px] text-on-primary"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={clearApiKey}
+                      className="rounded-full bg-surface-container-high px-3 py-2 text-[11px] text-on-surface-variant"
+                    >
+                      Clear
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           )}
 
-          <div className="px-4 pt-3 pb-2">
-            <button
-              onClick={() => runPlanner('Optimize this plan for today', 'optimize')}
-              disabled={sending}
-              className="w-full rounded-full bg-gradient-to-br from-primary to-primary-dim px-4 py-2 text-xs text-on-primary disabled:opacity-50"
-            >
-              Optimize This Plan For Today
-            </button>
-          </div>
-
-          <div className="px-4 pb-2">
-            <div className="rounded-xl bg-surface-container-low p-3 border border-outline-variant/20">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] uppercase tracking-widest text-on-surface-variant">Donna Actions</p>
-                <button
-                  className="text-[10px] text-on-surface-variant hover:text-primary"
-                  onClick={() => fetchDonnaActions()}
-                >
-                  Refresh
-                </button>
-              </div>
-
-              {donnaActionsLoading && <p className="text-[11px] text-on-surface-variant">Loading actions...</p>}
-              {!donnaActionsLoading && recentDonnaActions.length === 0 && (
-                <p className="text-[11px] text-on-surface-variant">No study block actions yet.</p>
-              )}
-              {!donnaActionsLoading && recentDonnaActions.length > 0 && (
-                <div className="space-y-2">
-                  {recentDonnaActions.map((action) => {
-                    const inFlight =
-                      donnaActionExecution.inFlight && donnaActionExecution.actionId === action.id
-                    return (
-                      <div key={action.id} className="rounded-lg bg-surface-container-lowest border border-outline-variant/20 p-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-xs font-medium text-on-surface">{action.payload.title || 'Study Block'}</p>
-                            <p className="text-[10px] text-on-surface-variant">{toLocalTimeRange(action)}</p>
-                          </div>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wide ${statusChipClass(action.status)}`}>
-                            {action.status}
-                          </span>
-                        </div>
-
-                        <div className="mt-2 flex items-center justify-between gap-2">
-                          <p className="text-[10px] text-on-surface-variant">
-                            {action.updatedAt
-                              ? new Date(action.updatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-                              : ''}
-                          </p>
-                          {action.status === 'proposed' && (
-                            <button
-                              disabled={inFlight || donnaActionExecution.inFlight}
-                              onClick={() => handleApproveAction(action)}
-                              className="px-2.5 py-1 rounded-full text-[10px] bg-on-surface text-surface disabled:opacity-50"
-                            >
-                              {inFlight ? 'Approving...' : 'Approve'}
-                            </button>
-                          )}
-                          {action.status === 'failed' && (
-                            <button
-                              disabled={donnaActionExecution.inFlight}
-                              onClick={() => handleRetryAction(action)}
-                              className="px-2.5 py-1 rounded-full text-[10px] bg-surface-container-high text-on-surface-variant disabled:opacity-50"
-                            >
-                              Retry
-                            </button>
-                          )}
-                        </div>
-                        {action.status === 'failed' && action.error && (
-                          <p className="mt-1 text-[10px] text-error line-clamp-2">{action.error}</p>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-              {!donnaActionsLoading && donnaActionsError?.message && (
-                <p className="mt-2 text-[10px] text-error">{donnaActionsError.message}</p>
-              )}
-              {actionStatusMessage && <p className="mt-2 text-[10px] text-on-surface-variant">{actionStatusMessage}</p>}
-            </div>
-          </div>
-
-          <div className="h-[320px] overflow-y-auto px-4 pb-4 space-y-3 thin-scrollbar">
+          <div className={`${expanded ? 'h-[480px]' : 'h-[320px]'} overflow-y-auto px-4 pb-4 space-y-3 thin-scrollbar`}>
             {chatMessages.map((message) => {
               const isUser = message.role === 'user'
               return (
