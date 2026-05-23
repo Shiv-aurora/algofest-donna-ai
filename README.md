@@ -25,6 +25,38 @@ npm run dev
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:8787`
 
+## Donna v2 (Algorithm Sidecar)
+
+Donna v2 adds a Python algorithm sidecar and `/api/v2/*` endpoints for hybrid scheduling:
+
+- `POST /api/v2/syllabus/ingest`
+- `POST /api/v2/plan/solve`
+- `POST /api/v2/plan/feasibility`
+- `POST /api/v2/plan/reoptimize`
+- `POST /api/v2/notify/decision`
+- `POST /api/v2/events/work`
+- `GET /api/v2/metrics/benchmark`
+
+### Local v2 dev (app + api + algo)
+```bash
+npm run dev:v2
+```
+
+### Full local stack (Postgres/Timescale + Redis + API + Algo + Worker)
+```bash
+npm run dev:stack
+```
+
+Optional one-time JSON-to-Postgres importer:
+```bash
+npm run migrate:legacy
+```
+
+Optional Telegram worker:
+```bash
+npm run worker:telegram
+```
+
 ## Deploy Option 2 (Vercel Serverless API)
 - Express app is now shared in [server/app.mjs](/Users/shivamarora/Documents/Code/Donna Ai/server/app.mjs).
 - Local dev runner stays [server/connectivity-server.mjs](/Users/shivamarora/Documents/Code/Donna Ai/server/connectivity-server.mjs).
