@@ -1,211 +1,177 @@
-# Donna AI
+# Donna
 
-Donna is an academic AI agent app with:
-- a Vite React frontend
-- a thin Express backend for auth, connectivity, and Donna action execution
+## What inspired this
 
-## Route Map
-- `/` public landing page
-- `/login` auth entry (Google, Guest, Demo)
-- `/dashboard` canonical app entry (guarded)
-- `/overview` redirect to `/dashboard`
-- `/today` redirect to `/dashboard`
-- `/assignments` guarded app route
-- `/calendar` guarded app route
-- `/goals` guarded app route
-- `/settings` guarded app route
+I'm a junior doing a double major, and outside class I'm handling 3 jobs, the internship hunt, 19 credits every semester, ML research, and cooking. A normal week has more moving parts than I can hold in my head.
 
-## Local Run
+So I tracked it badly, planned late at night, and missed deadlines.
+
+I tried using an LLM to plan my week. It felt smart for a day. Then I noticed the schedules were wrong: two things in the same hour, work scheduled *after* its deadline. It wasn't reasoning about my week. It was generating text that looked like a plan. An LLM doesn't know whether a schedule is feasible. It just writes one that sounds plausible.
+
+That's why Donna exists. Planning a semester isn't a language problem; it's a constraint problem.
+
+## What it does
+
+Everything.
+
+You upload syllabi. Donna extracts deadlines, learns how long each type of assignment takes *you*, and builds a weekly schedule around classes, sleep, and non-negotiables. If you ask, "can I take Friday night off?", it re-solves and tells you exactly what breaks.
+
+The LLM is still used, but only as a translator: it converts natural language into structured requests and explains solver output back to you. It does not make scheduling decisions.
+
+## How I built it
+
+Donna runs as a React + Express app with a Python algorithm sidecar.
+
+![Donna system architecture](./system-dig.png)
+
+Scheduling core (CP-SAT / MIP):
+
+$$
+\min \sum_k w_k \cdot \text{penalty}_k(x) \quad \text{s.t. hard feasibility constraints}
+$$
+
+Hard constraints enforce deadlines, sleep, and class windows. Soft penalties reduce late-night overload and context switching.
+
+Time estimation is hierarchical Bayesian:
+
+$$
+\log(\text{hours}) \sim \mathcal{N}(\mu_u + \alpha_t + \beta_c + \gamma^\top x,\ \sigma^2)
+$$
+
+Cold start is handled by pooled priors; estimates personalize as completion data arrives.
+
+If a request is infeasible, Donna runs IIS-style conflict extraction to return the *minimal* conflicting constraint set. Fast rescheduling uses large-neighborhood search. Additional modules include a Cox model (procrastination risk), Thompson sampling (notification timing), HAR forecasting (workload), and CRF-based syllabus extraction verification.
+
+## What I learned
+
+It is easy to *look* finished. Endpoints can return `200` while algorithmic behavior is still wrong.
+
+In one audit, feasibility checks passed obviously impossible inputs because overflow was effectively unconstrained. Smoke tests passed, correctness failed.
+
+I switched to explicit acceptance tests with numeric pass/fail criteria for each algorithm. "It returns something" is not evidence.
+
+## The challenges
+
+The hardest part was the audit-and-fix loop:
+
+- feasibility logic that passed impossible inputs
+- a reoptimizer that reshuffled everything instead of patching locally
+- a router that sent most requests down one path
+
+All of these built and linted cleanly before audit.
+
+The other challenge was being honest about data-hungry models. Cox, bandit, and forecasting modules are real, but improve only after enough user history. The retraining loop exists; claims stay grounded.
+
+## Replication
+
+### 1) Prerequisites
+
+- Node.js 20+
+- npm 10+
+- Python 3.11+
+- Docker Desktop (recommended for full stack)
+- Optional for local LLM mode: Ollama running on `http://localhost:11434`
+
+### 2) Clone and install
+
 ```bash
+git clone <your-repo-url>
+cd donna
 npm install
+```
+
+### 3) Configure environment
+
+```bash
+cp .env.example .env
+```
+
+Minimum required variables for local development:
+
+- `SESSION_SECRET`
+- `FRONTEND_ORIGIN`
+- `SERVER_BASE_URL`
+- `ALGO_SERVICE_BASE_URL`
+- `POSTGRES_URL`
+- `REDIS_URL`
+
+Optional cloud LLM vars:
+
+- `GROQ_API_KEY`
+- `GROQ_MODEL`
+- `GROQ_STRONG_MODEL`
+
+Optional local LLM vars:
+
+- `OLLAMA_BASE_URL` (default `http://localhost:11434`)
+- `OLLAMA_MODEL` (default `gemma3:4b`)
+- `OLLAMA_TIMEOUT_MS`
+
+### 4) Run
+
+Frontend + API:
+
+```bash
 npm run dev
 ```
 
-- `npm run dev` now starts both frontend and backend together.
-- Frontend: `http://localhost:5173`
-- Backend: `http://localhost:8787`
+Frontend + API + algorithm sidecar:
 
-## Donna v2 (Algorithm Sidecar)
-
-Donna v2 adds a Python algorithm sidecar and `/api/v2/*` endpoints for hybrid scheduling:
-
-- `POST /api/v2/syllabus/ingest`
-- `POST /api/v2/plan/solve`
-- `POST /api/v2/plan/feasibility`
-- `POST /api/v2/plan/reoptimize`
-- `POST /api/v2/notify/decision`
-- `POST /api/v2/events/work`
-- `GET /api/v2/metrics/benchmark`
-
-### Local v2 dev (app + api + algo)
 ```bash
 npm run dev:v2
 ```
 
-### Full local stack (Postgres/Timescale + Redis + API + Algo + Worker)
+Full Docker stack (Postgres + Redis + API + Algo + worker):
+
 ```bash
 npm run dev:stack
 ```
 
-Optional one-time JSON-to-Postgres importer:
+### 5) Verify end to end
+
+1. Open `http://localhost:5173`.
+2. Sign in via `/login` (Google / Guest / Demo).
+3. Go to dashboard and ask Donna to optimize a plan.
+4. In chat header, switch provider mode (`Groq API` or `Local Server`).
+5. Confirm status reflects route/provider and fallback state.
+
+### 6) Run checks
+
 ```bash
-npm run migrate:legacy
+npm run lint
+npm run build
 ```
 
-Optional Telegram worker:
+Algorithm tests:
+
 ```bash
-npm run worker:telegram
+cd algo-service
+python -m pytest tests
 ```
 
-## Deploy Option 2 (Vercel Serverless API)
-- Express app is now shared in [server/app.mjs](/Users/shivamarora/Documents/Code/Donna Ai/server/app.mjs).
-- Local dev runner stays [server/connectivity-server.mjs](/Users/shivamarora/Documents/Code/Donna Ai/server/connectivity-server.mjs).
-- Vercel API entry is [api/index.js](/Users/shivamarora/Documents/Code/Donna Ai/api/index.js) and handles all `/api/*` via `vercel.json` routes.
-- Frontend uses same-origin `/api/*` in production automatically (no hardcoded `localhost:8787`).
+Benchmark harness:
 
-Required Vercel env vars (Production):
-- `SESSION_SECRET`
-- `REDIS_URL`
-- `FRONTEND_ORIGIN` (your Vercel frontend URL)
-- `SERVER_BASE_URL` (your Vercel deployment URL)
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
-- `GROQ_API_KEY`
+```bash
+python scripts/benchmark-tokens.py
+```
 
-## Authentication Model
-Donna now uses explicit session login modes. There is no implicit auto-login local user.
+## API surface (current)
 
-Users authenticate via `/login`:
-1. Continue with Google (identity-only)
-2. Continue as Guest
-3. Explore Demo
-
-Backend session source of truth: `express-session` cookie on the API.
-No frontend token storage is used.
-
-## Google Setup (Identity + Calendar)
-Create one Google OAuth Web Application in Google Cloud and enable Google Calendar API.
-
-### Authorized Redirect URIs
-Add both:
-- `http://localhost:8787/api/auth/google/callback` (Google identity login)
-- `http://localhost:8787/api/oauth/google_calendar/callback` (calendar connect in Settings)
-
-### Environment Variables
-Copy `.env.example` to `.env` and fill:
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
-- `GROQ_API_KEY`
-- `SESSION_SECRET`
-- `REDIS_URL` (required in production)
-- optional origin/port overrides
-
-Production startup checks now fail fast if:
-- `SESSION_SECRET` is missing/weak
-- `FRONTEND_ORIGIN` or `SERVER_BASE_URL` are invalid URLs
-- Google OAuth credentials are missing
-- `REDIS_URL` is missing
-
-## Auth/Session Endpoints
-- `GET /api/auth/login` (legacy helper redirect to `/login`)
-- `GET /api/auth/google/start?returnTo=...`
-- `GET /api/auth/google/callback`
-- `POST /api/auth/guest-login`
-- `POST /api/auth/demo-login`
-- `GET /api/auth/me`
-- `POST /api/auth/logout`
-- `GET /api/auth/csrf`
-- `GET /api/debug/session` (dev only)
-
-`GET /api/auth/me` includes:
-- `authenticated`
-- `user` (with `mode: google | guest | demo` when authenticated)
-- `authStateCode` (`authenticated | unauthenticated`)
-- `reasonCode`
-
-## Calendar Connectivity (separate from identity login)
-Calendar connect remains explicit in Settings.
-
-Endpoints:
-- `GET /api/connectivity/providers`
-- `POST /api/connectivity/:provider/connect`
-- `POST /api/connectivity/:provider/disconnect`
-- `POST /api/connectivity/:provider/sync`
-- `GET /api/oauth/google_calendar/callback`
-- `GET /api/ops/metrics` (requires authenticated session + `x-ops-key` header and `OPS_METRICS_KEY` env)
-
-## Donna Calendar Action Flow
-Endpoints:
-- `GET /api/donna/calendar/context`
 - `POST /api/donna/planner`
-- `GET /api/donna/planner/usage`
-- `GET /api/donna/actions`
-- `POST /api/donna/actions/propose-study-block`
-- `POST /api/donna/actions/:id/approve`
+- `POST /api/v2/plan/solve`
+- `POST /api/v2/plan/feasibility`
+- `POST /api/v2/plan/reoptimize`
+- `POST /api/v2/syllabus/ingest`
 
-Action lifecycle:
-- `proposed`
-- `approved`
-- `executed`
-- `failed`
+Provider metadata is returned on LLM-assisted routes:
 
-Action logs are persisted in:
-- `server/data/action-log.json`
+- `providerUsed`
+- `fallback`
+- `fallbackReason`
 
-Planner/rate-limit data is persisted in:
-- `server/data/usage-limits.json`
+## Security/public-repo hygiene
 
-## Groq Planner Free Tier + BYOK
-Cloud planning now runs through backend Groq (not browser-direct OpenAI).
-
-Free tier is available only for Google-login sessions and is enforced server-side:
-- `50` requests/hour per hashed IP
-- `10` requests per user in rolling 24h
-- `75,000` tokens per user in rolling 7d
-
-When free quota is exhausted, planner responses return `byok_required` and users can continue by providing their own API key in the Donna widget.
-
-## Auth Guard Codes (frontend/backend contract)
-Donna external actions use canonical machine codes:
-- `login_required`
-- `connect_provider_required`
-- `misconfigured`
-- `provider_error`
-- `backend_unavailable`
-- `execution_failed`
-- `byok_required`
-- `quota_exceeded_hourly_ip`
-- `quota_exceeded_daily_user`
-- `quota_exceeded_weekly_tokens`
-
-## Security Guardrails (current)
-- Redis-backed server sessions (`connect-redis`) with `httpOnly` cookie and production `secure` mode.
-- CSRF protection for all state-changing `/api/*` routes using session-bound token + origin check.
-- Security headers with `helmet` + explicit CSP policy.
-- Sanitized API error responses (no raw upstream token/provider payloads returned to UI).
-- Structured logs include request id, route, status, user mode, and reason-code counters (user IDs hashed).
-- OAuth pending-state callbacks expire after 10 minutes.
-- BYOK planner API keys are stored only in `sessionStorage` (not persisted in `localStorage`).
-
-## Quick E2E Demo Check
-1. Open `/login` and choose Google, Guest, or Demo.
-2. For real calendar flow: in `/settings`, connect Google Calendar.
-3. Verify provider status from Settings or `GET /api/connectivity/providers`.
-4. Propose a study block via Donna.
-5. Approve it.
-6. Confirm action status becomes `executed` and event appears in Google Calendar.
-
-## Design Assets
-Design references are in `deisgn-pack/`, transformed into:
-- `public/images`
-- `src/fragments`
-
-Regenerate:
-```bash
-npm run prepare:design
-```
-
-Screenshot diff QA:
-```bash
-npm run qa:screens
-```
+- `.env` is ignored.
+- Local assistant/debug artifacts are removed from tracked source.
+- Archived non-production files are kept in local `archive/` (gitignored).
+- Before publishing, rotate any previously used API keys and OAuth secrets.
